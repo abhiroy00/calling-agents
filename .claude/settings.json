@@ -1,0 +1,12 @@
+{
+  "permissions": {
+    "allow": [
+      "PowerShell($headers = @{ \"Origin\" = \"http://localhost:5174\"; \"Access-Control-Request-Method\" = \"POST\"; \"Access-Control-Request-Headers\" = \"Content-Type,Authorization\" }; $resp = Invoke-WebRequest -Uri \"http://localhost:8000/api/auth/login/\" -Method OPTIONS -Headers $headers -UseBasicParsing; $resp.Headers[\"Access-Control-Allow-Origin\"])",
+      "PowerShell(Invoke-RestMethod -Uri \"http://localhost:4040/api/tunnels\")",
+      "PowerShell(cd d:\\\\callingagent\\\\backend; docker compose exec web python manage.py createsuperuser --email admin@crm.com --noinput 2>&1; echo \"Exit: $LASTEXITCODE\")",
+      "PowerShell(Invoke-RestMethod -Uri \"http://localhost:4040/api/tunnels\" 2>&1)",
+      "PowerShell(curl -s -o /dev/null -w \"%{http_code}\" http://localhost:80/api/auth/login/ -X POST -H \"Content-Type: application/json\" -d '{\"email\":\"x\",\"password\":\"x\"}' 2>&1)",
+      "PowerShell($r = Invoke-WebRequest -Uri \"http://localhost:80/api/auth/login/\" -Method POST -ContentType \"application/json\" -Body '{\"email\":\"x\",\"password\":\"x\"}' -UseBasicParsing; $r.StatusCode)"
+    ]
+  }
+}
