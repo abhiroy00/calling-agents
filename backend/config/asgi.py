@@ -9,12 +9,15 @@ from channels.routing import ProtocolTypeRouter, URLRouter
 from channels.auth import AuthMiddlewareStack
 from django.urls import path
 from apps.calls.consumers import LiveConsumer
+from apps.calls.media_consumer import ExotelMediaConsumer
 
 application = ProtocolTypeRouter({
     'http': get_asgi_application(),
-    'websocket': AuthMiddlewareStack(
-        URLRouter([
-            path('ws/calls/', LiveConsumer.as_asgi()),
-        ])
-    ),
+    'websocket': URLRouter([
+        # Exotel Voicebot applet connects here; no session auth involved.
+        path('ws/exotel/media/', ExotelMediaConsumer.as_asgi()),
+        path('ws/calls/', AuthMiddlewareStack(
+            URLRouter([path('', LiveConsumer.as_asgi())])
+        )),
+    ]),
 })

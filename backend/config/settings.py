@@ -115,24 +115,30 @@ SIMPLE_JWT = {
 CORS_ALLOWED_ORIGINS = config('FRONTEND_ORIGIN', default='http://localhost:5173', cast=Csv())
 CORS_ALLOW_CREDENTIALS = True
 
-_redis_url = config('REDIS_URL', default='redis://localhost:6379/0')
-_r = urllib.parse.urlparse(_redis_url)
-CHANNEL_LAYERS = {
-    'default': {
-        'BACKEND': 'channels_redis.core.RedisChannelLayer',
-        'CONFIG': {
-            'hosts': [{
-                'host': _r.hostname or 'localhost',
-                'port': _r.port or 6379,
-                'db': int((_r.path or '/0').lstrip('/') or 0),
-                'socket_timeout': None,
-                'socket_connect_timeout': 10,
-            }],
-            'capacity': 1500,
-            'expiry': 60,
-        },
+if config('CHANNEL_BACKEND', default='redis') == 'memory':
+    # Single-process dev fallback (e.g. when local Redis is older than v6).
+    CHANNEL_LAYERS = {
+        'default': {'BACKEND': 'channels.layers.InMemoryChannelLayer'},
     }
-}
+else:
+    _redis_url = config('REDIS_URL', default='redis://localhost:6379/0')
+    _r = urllib.parse.urlparse(_redis_url)
+    CHANNEL_LAYERS = {
+        'default': {
+            'BACKEND': 'channels_redis.core.RedisChannelLayer',
+            'CONFIG': {
+                'hosts': [{
+                    'host': _r.hostname or 'localhost',
+                    'port': _r.port or 6379,
+                    'db': int((_r.path or '/0').lstrip('/') or 0),
+                    'socket_timeout': None,
+                    'socket_connect_timeout': 10,
+                }],
+                'capacity': 1500,
+                'expiry': 60,
+            },
+        }
+    }
 
 CELERY_BROKER_URL = config('CELERY_BROKER_URL', default='amqp://guest:guest@localhost:5672//')
 CELERY_RESULT_BACKEND = config('REDIS_URL', default='redis://localhost:6379/0')
@@ -148,4 +154,6 @@ EXOTEL_API_SECRET = config('EXOTEL_API_SECRET', default='')
 EXOTEL_FROM_NUMBER = config('EXOTEL_FROM_NUMBER', default='')
 EXOTEL_APP_ID = config('EXOTEL_APP_ID', default='')
 OPENAI_API_KEY = config('OPENAI_API_KEY', default='')
+OPENAI_REALTIME_MODEL = config('OPENAI_REALTIME_MODEL', default='gpt-realtime')
+OPENAI_REALTIME_VOICE = config('OPENAI_REALTIME_VOICE', default='alloy')
 PUBLIC_HOST = config('PUBLIC_HOST', default='localhost:8000')

@@ -9,9 +9,6 @@ from channels.layers import get_channel_layer
 from .models import Call, Transcript
 from .serializers import CallSerializer, CallDetailSerializer
 
-_FAREWELL = {'bye', 'goodbye', 'thank you', 'no thank you', 'not interested', 'hang up', 'end call'}
-
-
 def _broadcast(event_data):
     try:
         channel_layer = get_channel_layer()
@@ -34,85 +31,6 @@ class CallListView(generics.ListAPIView):
 class CallDetailView(generics.RetrieveAPIView):
     queryset = Call.objects.prefetch_related('transcripts').all()
     serializer_class = CallDetailSerializer
-
-
-class ExoMLWebhookView(APIView):
-    """Exotel calls this when the call is answered — returns the opening ExoML."""
-    permission_classes = [AllowAny]
-
-    def get(self, request, pk):
-        return self._exoml(pk)
-
-    def post(self, request, pk):
-        # Capture Exotel's call SID if we don't have it yet
-        call_sid = request.POST.get('CallSid', '')
-        if call_sid:
-            Call.objects.filter(pk=pk, twilio_sid='').update(twilio_sid=call_sid)
-        Call.objects.filter(pk=pk).update(status='in_progress', started_at=timezone.now())
-        _broadcast({'type': 'call.status', 'call_id': pk, 'status': 'in_progress'})
-        return self._exoml(pk)
-
-    def _exoml(self, pk):
-        from .exotel_client import build_exoml_gather
-        try:
-            call = Call.objects.select_related('lead').get(pk=pk)
-            name = call.lead.name if call.lead else 'there'
-            greeting = f'Hi {name}, this is an AI assistant. How can I help you today?'
-        except Call.DoesNotExist:
-            greeting = 'Hello, this is an AI assistant. How can I help you today?'
-        return HttpResponse(build_exoml_gather(pk, greeting), content_type='application/xml')
-
-
-class GatherView(APIView):
-    """Exotel POSTs here after each <Gather> with the transcribed SpeechResult."""
-    permission_classes = [AllowAny]
-
-    def post(self, request, pk):
-        from .exotel_client import build_exoml_gather, build_exoml_say_hangup
-        from .llm import get_response_sync
-
-        try:
-            call = Call.objects.select_related('campaign').get(pk=pk)
-        except Call.DoesNotExist:
-            return HttpResponse(
-                '<?xml version="1.0"?><Response><Hangup/></Response>',
-                content_type='application/xml',
-            )
-
-        speech = request.POST.get('SpeechResult', '').strip()
-        if not speech:
-            return HttpResponse(
-                build_exoml_gather(pk, 'Sorry, I did not catch that. Could you please repeat?'),
-                content_type='application/xml',
-            )
-
-        Transcript.objects.create(call_id=pk, role='human', text=speech)
-        _broadcast({'type': 'call.transcript', 'call_id': pk, 'role': 'human', 'text': speech})
-
-        transcripts = list(Transcript.objects.filter(call_id=pk).order_by('timestamp'))
-        messages = [
-            {'role': 'user' if t.role == 'human' else 'assistant', 'content': t.text}
-            for t in transcripts
-        ]
-
-        system_prompt = (
-            call.system_prompt
-            or (call.campaign.system_prompt if call.campaign else None)
-            or 'You are a helpful AI assistant on a phone call. Be concise and friendly. Keep responses under 2 sentences.'
-        )
-
-        try:
-            ai_text = get_response_sync(messages, system_prompt)
-        except Exception:
-            ai_text = 'I apologize, I had a technical difficulty. Could you please repeat that?'
-
-        Transcript.objects.create(call_id=pk, role='ai', text=ai_text)
-        _broadcast({'type': 'call.transcript', 'call_id': pk, 'role': 'ai', 'text': ai_text})
-
-        if any(word in speech.lower() for word in _FAREWELL):
-            return HttpResponse(build_exoml_say_hangup(ai_text), content_type='application/xml')
-
-        return HttpResponse(build_exoml_gather(pk, ai_text), content_type='application/xml')
 
 
 class StatusCallbackView(APIView):

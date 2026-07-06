@@ -1,4 +1,3 @@
-import xml.sax.saxutils as saxutils
 import requests
 from django.conf import settings
 
@@ -27,6 +26,9 @@ def dial(lead, campaign, call_id: int) -> str:
             'CallerId': settings.EXOTEL_FROM_NUMBER,
             'Url': flow_url,
             'CallType': 'trans',
+            # Echoed back in the Voicebot stream's start event so the media
+            # consumer can map the stream to our Call row.
+            'CustomField': f'call_id={call_id}',
             'StatusCallback': f'https://{settings.PUBLIC_HOST}/api/calls/{call_id}/status/',
         },
         timeout=30,
@@ -38,29 +40,3 @@ def dial(lead, campaign, call_id: int) -> str:
             message = resp.text[:300]
         raise RuntimeError(f'Exotel error {resp.status_code}: {message}')
     return resp.json()['Call']['Sid']
-
-
-def build_exoml_gather(call_id: int, say_text: str) -> str:
-    gather_url = f'https://{settings.PUBLIC_HOST}/api/calls/{call_id}/gather/'
-    safe_text = saxutils.escape(say_text)
-    return (
-        '<?xml version="1.0" encoding="UTF-8"?>\n'
-        '<Response>\n'
-        f'  <Gather input="speech" action="{gather_url}" method="POST"'
-        ' timeout="5" speechTimeout="auto">\n'
-        f'    <Say>{safe_text}</Say>\n'
-        '  </Gather>\n'
-        '  <Hangup/>\n'
-        '</Response>'
-    )
-
-
-def build_exoml_say_hangup(say_text: str) -> str:
-    safe_text = saxutils.escape(say_text)
-    return (
-        '<?xml version="1.0" encoding="UTF-8"?>\n'
-        '<Response>\n'
-        f'  <Say>{safe_text}</Say>\n'
-        '  <Hangup/>\n'
-        '</Response>'
-    )
