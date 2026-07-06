@@ -8,7 +8,7 @@ from django.utils import timezone
 def dial_campaign_leads(self, campaign_id: int):
     from apps.campaigns.models import Campaign, CampaignLead
     from apps.calls.models import Call
-    from apps.calls import twilio_client
+    from apps.calls import exotel_client as twilio_client
 
     try:
         campaign = Campaign.objects.get(pk=campaign_id)
@@ -56,7 +56,7 @@ def dial_campaign_leads(self, campaign_id: int):
 @shared_task(bind=True, max_retries=2, default_retry_delay=120)
 def retry_failed_call(self, call_id: int):
     from apps.calls.models import Call
-    from apps.calls import twilio_client
+    from apps.calls import exotel_client as twilio_client
 
     try:
         call = Call.objects.select_related('lead', 'campaign').get(pk=call_id)

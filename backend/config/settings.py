@@ -11,6 +11,7 @@ DEBUG = config('DEBUG', default=True, cast=bool)
 ALLOWED_HOSTS = config('ALLOWED_HOSTS', default='*', cast=Csv())
 
 INSTALLED_APPS = [
+    'daphne',
     'django.contrib.admin',
     'django.contrib.auth',
     'django.contrib.contenttypes',
@@ -141,8 +142,9 @@ CELERY_RESULT_SERIALIZER = 'json'
 CELERY_TIMEZONE = 'UTC'
 CELERY_BEAT_SCHEDULER = 'django_celery_beat.schedulers:DatabaseScheduler'
 
-TWILIO_ACCOUNT_SID = config('TWILIO_ACCOUNT_SID', default='')
-TWILIO_AUTH_TOKEN = config('TWILIO_AUTH_TOKEN', default='')
-TWILIO_FROM_NUMBER = config('TWILIO_FROM_NUMBER', default='')
+EXOTEL_SID = config('EXOTEL_SID', default='')
+EXOTEL_API_KEY = config('EXOTEL_API_KEY', default='')
+EXOTEL_API_SECRET = config('EXOTEL_API_SECRET', default='')
+EXOTEL_FROM_NUMBER = config('EXOTEL_FROM_NUMBER', default='')
 OPENAI_API_KEY = config('OPENAI_API_KEY', default='')
 PUBLIC_HOST = config('PUBLIC_HOST', default='localhost:8000')
