@@ -45,16 +45,19 @@ jobs:
             User ec2-user
             IdentityFile ~/.ssh/deploy_key" > ~/.ssh/config
 
-      - name: Ensure docker buildx on server
+      - name: Ensure modern docker buildx on server
         run: |
           ssh server 'bash -s' <<'EOF'
           set -e
-          if ! docker buildx version >/dev/null 2>&1; then
+          # The distro docker package ships a buildx too old for compose
+          # (needs >= 0.17). Install the latest into ~/.docker/cli-plugins,
+          # which outranks the system plugin directory.
+          if [ ! -x ~/.docker/cli-plugins/docker-buildx ]; then
             VER=$(curl -s https://api.github.com/repos/docker/buildx/releases/latest | grep -oP '"tag_name": "\K[^"]+')
-            sudo mkdir -p /usr/local/lib/docker/cli-plugins
-            sudo curl -SL "https://github.com/docker/buildx/releases/download/${VER}/buildx-${VER}.linux-amd64" \
-              -o /usr/local/lib/docker/cli-plugins/docker-buildx
-            sudo chmod +x /usr/local/lib/docker/cli-plugins/docker-buildx
+            mkdir -p ~/.docker/cli-plugins
+            curl -SL "https://github.com/docker/buildx/releases/download/${VER}/buildx-${VER}.linux-amd64" \
+              -o ~/.docker/cli-plugins/docker-buildx
+            chmod +x ~/.docker/cli-plugins/docker-buildx
           fi
           docker buildx version
           EOF
