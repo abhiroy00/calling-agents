@@ -1,0 +1,92 @@
+name: Backend CI/CD
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'backend/**'
+      - '.github/workflows/deploy.yml'
+  workflow_dispatch: {}
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install dependencies with uv
+        run: |
+          pip install uv
+          uv pip install --system -r backend/requirements.txt
+
+      - name: Django system checks
+        working-directory: backend
+        run: python manage.py check
+
+  deploy:
+    needs: check
+    runs-on: ubuntu-latest
+    concurrency: production-deploy  # never two deploys at once
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up SSH
+        run: |
+          mkdir -p ~/.ssh
+          printf '%s' "${{ secrets.EC2_SSH_KEY }}" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          ssh-keyscan -H "${{ secrets.EC2_HOST }}" >> ~/.ssh/known_hosts
+          echo "Host server
+            HostName ${{ secrets.EC2_HOST }}
+            User ec2-user
+            IdentityFile ~/.ssh/deploy_key" > ~/.ssh/config
+
+      - name: Sync backend code to server
+        run: |
+          ssh server 'mkdir -p ~/app/backend'
+          rsync -az --delete --exclude '.env.docker' ./backend/ server:~/app/backend/
+
+      - name: Write production env file
+        run: |
+          printf '%s' "${{ secrets.ENV_DOCKER }}" | ssh server 'cat > ~/app/backend/.env.docker'
+
+      - name: Obtain TLS certificate (first run only)
+        run: |
+          ssh server 'bash -s' <<'EOF'
+          set -e
+          cd ~/app/backend
+          DOMAIN=$(grep '^DOMAIN=' .env.docker | cut -d= -f2 | tr -d "\r ")
+          EMAIL=$(grep '^CERTBOT_EMAIL=' .env.docker | cut -d= -f2 | tr -d "\r ")
+          if ! docker run --rm -v callingcrm_certbot_certs:/etc/letsencrypt alpine \
+              test -e "/etc/letsencrypt/live/$DOMAIN/fullchain.pem"; then
+            echo "No certificate for $DOMAIN yet - bootstrapping via standalone certbot"
+            docker compose --profile bundled-tls stop nginx 2>/dev/null || true
+            docker compose --profile bundled-tls run --rm -p 80:80 --entrypoint \
+              "certbot certonly --standalone -d $DOMAIN --agree-tos -m $EMAIL --non-interactive" certbot
+          else
+            echo "Certificate for $DOMAIN already present"
+          fi
+          EOF
+
+      - name: Deploy stack
+        run: |
+          ssh server 'bash -s' <<'EOF'
+          set -e
+          cd ~/app/backend
+          docker compose --profile bundled-tls up -d --build --remove-orphans
+          docker image prune -f
+          docker compose ps
+          EOF
+
+      - name: Ensure superuser exists
+        run: |
+          ssh server "cd ~/app/backend && docker compose exec -T \
+            -e DJANGO_SUPERUSER_EMAIL='${{ secrets.DJANGO_SUPERUSER_EMAIL }}' \
+            -e DJANGO_SUPERUSER_PASSWORD='${{ secrets.DJANGO_SUPERUSER_PASSWORD }}' \
+            -e DJANGO_SUPERUSER_NAME='${{ secrets.DJANGO_SUPERUSER_NAME }}' \
+            web python manage.py createsuperuser --noinput" \
+            || echo "Superuser already exists - skipping"

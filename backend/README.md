@@ -20,7 +20,7 @@ Django backend for an **AI outbound-calling CRM**: it stores leads, organizes th
 | AI voice | OpenAI Realtime API (`gpt-realtime`, speech-to-speech) | The agent that talks on the call |
 | AI text | OpenAI Chat Completions (`gpt-4o`) | Disposition classification (and legacy chat helpers) |
 | Static files | WhiteNoise | Serves collected static assets |
-| Deployment | Docker Compose (postgres, redis, rabbitmq, web, celery, celery-beat, nginx) | Full production-ish stack |
+| Deployment | Docker Compose (postgres, redis, rabbitmq, web, celery, celery-beat, nginx, certbot) | Full production stack; nginx terminates TLS, certbot auto-renews |
 
 ---
 
@@ -68,9 +68,10 @@ backend/
 ├── requirements.txt           Python dependencies
 ├── Dockerfile                 python:3.12-slim image; runs entrypoint.sh then daphne
 ├── entrypoint.sh              Waits for Postgres, runs migrate, collectstatic (web only)
-├── docker-compose.yml         postgres / redis / rabbitmq / web / celery / celery-beat / nginx
-├── nginx/default.conf         Reverse proxy: /static/, /ws/ (WS upgrade), /api/, /admin/
-├── .env                       Local secrets/config (gitignored) — see §8
+├── docker-compose.yml         postgres / redis / rabbitmq / web / celery / celery-beat / nginx / certbot
+├── nginx/templates/default.conf.template   TLS reverse proxy; ${DOMAIN} substituted at start
+├── .env                       Local dev secrets/config (gitignored) — see §8
+├── .env.docker                Production secrets/config for compose (gitignored)
 ├── config/                    Project package
 │   ├── settings.py            All configuration (see §4)
 │   ├── urls.py                Root URL map → mounts each app under /api/<app>/
@@ -327,9 +328,25 @@ Single endpoint, `GET /api/analytics/summary/` (JWT), optional `?campaign=<id>` 
 
 ## 9. Deployment & local dev
 
-### Docker Compose (production-ish)
+### Docker Compose (production)
 
-`docker-compose.yml` runs: **postgres:16**, **redis:7**, **rabbitmq:3-management** (mgmt UI on :15673), **web** (Dockerfile → `entrypoint.sh` waits for Postgres, migrates, collectstatic, then `daphne -b 0.0.0.0 -p 8000 config.asgi:application`), **celery** worker (-c 4), **celery-beat**, and **nginx** on :80 proxying `/static/`, `/ws/` (with proper WebSocket upgrade headers and 24 h read timeout), `/api/`, `/admin/`. Config comes from `.env.docker`.
+`docker-compose.yml` runs: **postgres:16** (credentials from `.env.docker`; data in the `postgres_data` volume — this *is* the production database), **redis:7**, **rabbitmq:3-management** (mgmt UI on :15673), **web** (Dockerfile → `entrypoint.sh` waits for Postgres, migrates, collectstatic, then `daphne -b 0.0.0.0 -p 8000 config.asgi:application`), **celery** worker (-c 4), **celery-beat**, **nginx** on :80/:443 (config generated from `nginx/templates/default.conf.template` with `$DOMAIN`; proxies `/api/`, `/admin/`, `/static/`, and `/ws/` with WebSocket upgrade + 24 h timeouts), and **certbot** (renews the Let's Encrypt cert twice daily via webroot).
+
+Server deployment, in order:
+
+```bash
+# 0. DNS A record for yourdomain.com → server IP; fill YOURDOMAIN.COM in .env.docker
+# 1. one-time certificate bootstrap (port 80 must be free, so before first up):
+docker compose run --rm -p 80:80 --entrypoint \
+  "certbot certonly --standalone -d yourdomain.com --agree-tos -m you@example.com --non-interactive" certbot
+# 2. start everything
+docker compose up -d --build
+# 3. first admin account (fresh database)
+docker compose exec web python manage.py createsuperuser
+# 4. after each cert renewal cycle nginx needs a reload (or just):  docker compose restart nginx
+```
+
+Then set the Exotel Voicebot applet URL to `wss://yourdomain.com/ws/exotel/media/` — permanent, unlike a dev tunnel.
 
 ### Local dev (current workflow)
 
@@ -361,7 +378,7 @@ Frontend (Vite) runs separately on :5173 with `VITE_API_URL` / `VITE_WS_URL` poi
 - **`twilio_client.py` is dead code** (would `ImportError` if imported — `twilio` isn't installed). Delete when convenient.
 - **`llm.py`'s chat helpers** (`get_response_sync`, `stream_response`) are unused since the Realtime migration; only the disposition functions matter.
 - **`retry_failed_call`** exists but nothing schedules it.
-- **Open endpoints**: `POST /api/auth/register/` is unauthenticated and accepts any role (anyone can self-register as super_admin); `POST /api/calls/<id>/status/` accepts unauthenticated POSTs (needed for the webhook, but unvalidated — Exotel offers no signature; IP allow-listing would be the hardening path). The role permissions in `accounts/permissions.py` are defined but never applied.
+- **Open endpoint**: `POST /api/calls/<id>/status/` accepts unauthenticated POSTs (needed for the Exotel webhook, but unvalidated — Exotel offers no signature; IP allow-listing would be the hardening path). Registration is restricted to super admins; bootstrap the first admin with `createsuperuser`.
 - **Campaign dialing requires RabbitMQ + a Celery worker running**; the manual-dial path does not.
 - **`CHANNEL_BACKEND=memory`** only works single-process. With multiple Daphne processes/containers, live updates need real Redis (≥ v6).
 - **Calling-window check** in `dial_campaign_leads` uses server-local time (`timezone.localtime` with `TIME_ZONE=UTC`) — campaign windows are effectively UTC, not IST.

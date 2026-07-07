@@ -17,11 +17,10 @@ except Exception:
   echo "Postgres is ready."
 fi
 
-# Always run migrations (idempotent — safe for all services)
-python manage.py migrate --noinput
-
-# Only the web (daphne) container collects static files
+# Only the web (daphne) container migrates and collects static files —
+# running migrate from several containers at once races on a fresh database.
 if [ "$1" = "daphne" ]; then
+  python manage.py migrate --noinput
   echo "Collecting static files..."
   python manage.py collectstatic --noinput
 fi

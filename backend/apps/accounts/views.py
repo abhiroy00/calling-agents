@@ -4,6 +4,7 @@ from rest_framework import status
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework_simplejwt.views import TokenRefreshView
 from .serializers import LoginSerializer, RegisterSerializer, UserSerializer
+from .permissions import IsSuperAdmin
 
 
 class LoginView(APIView):
@@ -16,7 +17,9 @@ class LoginView(APIView):
 
 
 class RegisterView(APIView):
-    permission_classes = [AllowAny]
+    # Only an existing super admin may create accounts; bootstrap the first
+    # admin with `python manage.py createsuperuser`.
+    permission_classes = [IsSuperAdmin]
 
     def post(self, request):
         serializer = RegisterSerializer(data=request.data)

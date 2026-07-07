@@ -157,3 +157,8 @@ OPENAI_API_KEY = config('OPENAI_API_KEY', default='')
 OPENAI_REALTIME_MODEL = config('OPENAI_REALTIME_MODEL', default='gpt-realtime')
 OPENAI_REALTIME_VOICE = config('OPENAI_REALTIME_VOICE', default='alloy')
 PUBLIC_HOST = config('PUBLIC_HOST', default='localhost:8000')
+
+# Behind the nginx TLS proxy: trust its X-Forwarded-Proto so request.is_secure()
+# and admin CSRF checks work over https.
+SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
+CSRF_TRUSTED_ORIGINS = [f'https://{PUBLIC_HOST}']
