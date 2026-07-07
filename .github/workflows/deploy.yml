@@ -95,6 +95,9 @@ jobs:
           set -e
           cd ~/app/backend
           docker compose --profile bundled-tls up -d --build --remove-orphans
+          # Re-render the nginx config template (only processed at container
+          # start) and pick up any renewed TLS cert
+          docker compose --profile bundled-tls restart nginx
           docker image prune -f
           docker compose ps
           EOF
