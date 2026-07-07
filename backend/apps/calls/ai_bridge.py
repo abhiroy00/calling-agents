@@ -16,6 +16,16 @@ logger = logging.getLogger(__name__)
 
 REALTIME_URL = 'wss://api.openai.com/v1/realtime?model={model}'
 
+# Appended to every call's system prompt. Phone audio is 8 kHz and noisy, so
+# without an explicit language policy the model guesses (and then sticks with)
+# whatever language the first unclear utterance resembled.
+LANGUAGE_POLICY = (
+    ' LANGUAGE RULES: The caller speaks English and Hindi, often mixed (Hinglish). '
+    'Reply ONLY in English or Hindi, mirroring whichever language the caller used last. '
+    'NEVER use any other language, no matter what you think you heard. '
+    'If you could not understand the caller, ask them to repeat, in English.'
+)
+
 
 class RealtimeBridge:
     """Owns the OpenAI Realtime WebSocket for a single call.
@@ -48,12 +58,17 @@ class RealtimeBridge:
             'session': {
                 'type': 'realtime',
                 'output_modalities': ['audio'],
-                'instructions': self.system_prompt,
+                'instructions': self.system_prompt + LANGUAGE_POLICY,
                 'audio': {
                     'input': {
                         'format': {'type': 'audio/pcmu'},
                         'turn_detection': {'type': 'server_vad'},
-                        'transcription': {'model': 'gpt-4o-mini-transcribe'},
+                        'transcription': {
+                            'model': 'gpt-4o-mini-transcribe',
+                            # Steers language autodetection on noisy phone audio
+                            'prompt': 'Phone call in English and Hindi (Hinglish). '
+                                      'Transcribe Hindi in Devanagari script.',
+                        },
                     },
                     'output': {
                         'format': {'type': 'audio/pcmu'},

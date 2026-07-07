@@ -78,7 +78,10 @@ class ExotelMediaConsumer(AsyncWebsocketConsumer):
             on_interrupt=self._barge_in,
         )
         await self.bridge.connect(
-            greeting_hint=f'Greet the caller now. Their name is {name}. Keep it to one short sentence.'
+            greeting_hint=(
+                f'Greet the caller now, in English. Their name is {name}. '
+                'Keep it to one short sentence.'
+            )
         )
 
     # --- bridge callbacks -------------------------------------------------
