@@ -156,6 +156,13 @@ EXOTEL_APP_ID = config('EXOTEL_APP_ID', default='')
 OPENAI_API_KEY = config('OPENAI_API_KEY', default='')
 OPENAI_REALTIME_MODEL = config('OPENAI_REALTIME_MODEL', default='gpt-realtime')
 OPENAI_REALTIME_VOICE = config('OPENAI_REALTIME_VOICE', default='alloy')
+
+# 'openai' = Realtime speaks directly; 'elevenlabs' = Realtime thinks in text,
+# ElevenLabs provides the voice (better Hindi/Hinglish quality).
+AI_VOICE_PROVIDER = config('AI_VOICE_PROVIDER', default='openai')
+ELEVENLABS_API_KEY = config('ELEVENLABS_API_KEY', default='')
+ELEVENLABS_VOICE_ID = config('ELEVENLABS_VOICE_ID', default='OtEfb2LVzIE45wdYe54M')
+ELEVENLABS_MODEL = config('ELEVENLABS_MODEL', default='eleven_flash_v2_5')
 PUBLIC_HOST = config('PUBLIC_HOST', default='localhost:8000')
 
 # Behind the nginx TLS proxy: trust its X-Forwarded-Proto so request.is_secure()

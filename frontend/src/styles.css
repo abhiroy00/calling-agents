@@ -1,0 +1,215 @@
+@import "tailwindcss" source(none);
+@source "../src";
+@import "tw-animate-css";
+@import "@fontsource/inter/400.css";
+@import "@fontsource/inter/500.css";
+@import "@fontsource/inter/600.css";
+@import "@fontsource/inter/700.css";
+@import "@fontsource/space-grotesk/500.css";
+@import "@fontsource/space-grotesk/600.css";
+@import "@fontsource/space-grotesk/700.css";
+@import "@fontsource/jetbrains-mono/400.css";
+@import "@fontsource/jetbrains-mono/500.css";
+
+@custom-variant dark (&:is(.dark *));
+
+/*
+ * Enterprise SaaS design system.
+ * Inspired by Stripe / Salesforce Lightning: crisp light surfaces,
+ * confident blue primary, tabular numerics, minimal shadows.
+ * All colors oklch. Components use semantic tokens only — no hex.
+ */
+
+@theme inline {
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+  --radius-2xl: calc(var(--radius) + 8px);
+  --radius-3xl: calc(var(--radius) + 12px);
+
+  --font-display: "Inter", ui-sans-serif, system-ui, sans-serif;
+  --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, monospace;
+
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-primary-glow: var(--primary-glow);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-success: var(--success);
+  --color-success-foreground: var(--success-foreground);
+  --color-warning: var(--warning);
+  --color-warning-foreground: var(--warning-foreground);
+  --color-info: var(--info);
+  --color-info-foreground: var(--info-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-surface: var(--surface);
+  --color-elevated: var(--elevated);
+  --color-chart-1: var(--chart-1);
+  --color-chart-2: var(--chart-2);
+  --color-chart-3: var(--chart-3);
+  --color-chart-4: var(--chart-4);
+  --color-chart-5: var(--chart-5);
+  --color-sidebar: var(--sidebar);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-ring: var(--sidebar-ring);
+
+  --shadow-xs: 0 1px 1px 0 color-mix(in oklab, var(--foreground) 4%, transparent);
+  --shadow-sm: 0 1px 2px 0 color-mix(in oklab, var(--foreground) 6%, transparent),
+               0 1px 3px -1px color-mix(in oklab, var(--foreground) 4%, transparent);
+  --shadow-card: 0 1px 2px 0 color-mix(in oklab, var(--foreground) 5%, transparent),
+                 0 1px 0 0 color-mix(in oklab, var(--foreground) 3%, transparent);
+  --shadow-elevated: 0 8px 24px -12px color-mix(in oklab, var(--primary) 20%, transparent),
+                     0 2px 6px -2px color-mix(in oklab, var(--foreground) 8%, transparent);
+  --shadow-focus: 0 0 0 3px color-mix(in oklab, var(--primary) 25%, transparent);
+  --gradient-primary: linear-gradient(135deg,
+                        color-mix(in oklab, var(--primary) 100%, transparent),
+                        color-mix(in oklab, var(--primary-glow) 100%, transparent));
+}
+
+:root {
+  --radius: 0.625rem;
+
+  /* Light — Apollo.io inspired: violet primary on white, light sidebar */
+  --background: oklch(1 0 0);
+  --foreground: oklch(0.18 0.03 265);            /* deep navy ink */
+  --surface: oklch(0.985 0.004 270);             /* subtle app canvas */
+  --elevated: oklch(0.99 0.003 270);
+  --card: oklch(1 0 0);
+  --card-foreground: oklch(0.18 0.03 265);
+  --popover: oklch(1 0 0);
+  --popover-foreground: oklch(0.18 0.03 265);
+
+  --primary: oklch(0.56 0.24 285);               /* Apollo violet ~#6C47FF */
+  --primary-foreground: oklch(1 0 0);
+  --primary-glow: oklch(0.7 0.19 295);
+
+  --secondary: oklch(0.965 0.012 285);
+  --secondary-foreground: oklch(0.22 0.04 265);
+  --muted: oklch(0.965 0.008 270);
+  --muted-foreground: oklch(0.5 0.02 265);
+  --accent: oklch(0.955 0.03 290);
+  --accent-foreground: oklch(0.28 0.12 285);
+
+  --destructive: oklch(0.6 0.22 25);
+  --destructive-foreground: oklch(1 0 0);
+  --success: oklch(0.62 0.16 155);
+  --success-foreground: oklch(1 0 0);
+  --warning: oklch(0.78 0.15 75);
+  --warning-foreground: oklch(0.22 0.05 75);
+  --info: oklch(0.62 0.14 235);
+  --info-foreground: oklch(1 0 0);
+
+  --border: oklch(0.92 0.006 270);
+  --input: oklch(0.92 0.006 270);
+  --ring: oklch(0.56 0.24 285);
+
+  --chart-1: oklch(0.56 0.24 285);
+  --chart-2: oklch(0.62 0.16 155);
+  --chart-3: oklch(0.78 0.15 75);
+  --chart-4: oklch(0.62 0.19 320);
+  --chart-5: oklch(0.62 0.14 205);
+
+  /* Apollo-style light sidebar: near-white with violet active state */
+  --sidebar: oklch(0.995 0.002 270);
+  --sidebar-foreground: oklch(0.32 0.03 265);
+  --sidebar-primary: oklch(0.56 0.24 285);
+  --sidebar-primary-foreground: oklch(1 0 0);
+  --sidebar-accent: oklch(0.955 0.03 290);
+  --sidebar-accent-foreground: oklch(0.28 0.14 285);
+  --sidebar-border: oklch(0.92 0.006 270);
+  --sidebar-ring: oklch(0.56 0.24 285);
+}
+
+.dark {
+  --background: oklch(0.16 0.03 260);
+  --foreground: oklch(0.97 0.005 260);
+  --surface: oklch(0.19 0.03 260);
+  --card: oklch(0.19 0.03 260);
+  --card-foreground: oklch(0.97 0.005 260);
+  --popover: oklch(0.19 0.03 260);
+  --popover-foreground: oklch(0.97 0.005 260);
+  --primary: oklch(0.66 0.17 250);
+  --primary-foreground: oklch(0.13 0.03 260);
+  --muted: oklch(0.24 0.03 260);
+  --muted-foreground: oklch(0.72 0.02 260);
+  --accent: oklch(0.26 0.04 260);
+  --accent-foreground: oklch(0.97 0.005 260);
+  --border: oklch(1 0 0 / 10%);
+  --input: oklch(1 0 0 / 12%);
+}
+
+@layer base {
+  * {
+    border-color: var(--color-border);
+  }
+  html,
+  body {
+    background-color: var(--color-background);
+    color: var(--color-foreground);
+    font-family: var(--font-sans);
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+  }
+  h1, h2, h3, h4, h5, h6 {
+    font-family: var(--font-display);
+    letter-spacing: -0.015em;
+    font-weight: 600;
+  }
+  .font-mono, code, kbd, pre, samp {
+    font-family: var(--font-mono);
+  }
+  .tabular {
+    font-variant-numeric: tabular-nums;
+  }
+}
+
+@utility glass {
+  background: var(--color-card);
+  border: 1px solid var(--color-border);
+  box-shadow: var(--shadow-card);
+}
+
+@utility glow-ring {
+  box-shadow: var(--shadow-focus);
+}
+
+@utility gradient-text {
+  background: var(--gradient-primary);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+@utility grid-bg {
+  background-image:
+    linear-gradient(color-mix(in oklab, var(--color-primary) 6%, transparent) 1px, transparent 1px),
+    linear-gradient(90deg, color-mix(in oklab, var(--color-primary) 6%, transparent) 1px, transparent 1px);
+  background-size: 28px 28px;
+}
+
+@keyframes pulse-dot {
+  0%, 100% { box-shadow: 0 0 0 0 color-mix(in oklab, var(--color-success) 55%, transparent); }
+  50% { box-shadow: 0 0 0 6px color-mix(in oklab, var(--color-success) 0%, transparent); }
+}
+.pulse-dot { animation: pulse-dot 1.6s ease-in-out infinite; }
