@@ -114,7 +114,7 @@ function DialPage() {
       <div className="grid items-start gap-4 lg:grid-cols-[minmax(0,380px)_minmax(0,1fr)]">
         {/* Dialer card — sticky */}
         <div className="lg:sticky lg:top-4 lg:self-start">
-          <div className="glass rounded-2xl p-5 shadow-[var(--shadow-card)]">
+          <div className="glass rounded-2xl p-5 shadow-(--shadow-card)">
             <div className="rounded-xl border border-border bg-background/60 p-3">
               <p className="text-[10px] uppercase tracking-widest text-muted-foreground">
                 Number
@@ -172,7 +172,7 @@ function DialPage() {
             <button
               onClick={handleDial}
               disabled={!canDial || !phone.trim()}
-              className="mt-4 inline-flex w-full items-center justify-center gap-2 rounded-xl bg-primary py-3 text-sm font-semibold text-primary-foreground shadow-[var(--shadow-glow)] transition-all hover:bg-primary/90 disabled:opacity-50"
+              className="mt-4 inline-flex w-full items-center justify-center gap-2 rounded-xl bg-primary py-3 text-sm font-semibold text-primary-foreground shadow-(--shadow-glow) transition-all hover:bg-primary/90 disabled:opacity-50"
             >
               {isLoading ? (
                 <Loader2 className="h-4 w-4 animate-spin" />
@@ -191,7 +191,7 @@ function DialPage() {
         </div>
 
         {/* Live panel — scrolls with page */}
-        <div className="glass flex flex-col rounded-2xl p-5 shadow-[var(--shadow-card)]">
+        <div className="glass flex flex-col rounded-2xl p-5 shadow-(--shadow-card)">
           <div className="grid grid-cols-[minmax(0,1fr)_auto] items-start gap-3">
             <div className="min-w-0">
               <p className="text-[10px] uppercase tracking-widest text-muted-foreground">
@@ -223,7 +223,7 @@ function DialPage() {
 
           <div className="mt-4 rounded-lg border border-border bg-background/40 p-4">
             {transcript.length === 0 ? (
-              <div className="grid min-h-[240px] place-items-center text-center">
+              <div className="grid min-h-60 place-items-center text-center">
                 <div>
                   <div className="mx-auto grid h-10 w-10 place-items-center rounded-full bg-muted text-muted-foreground">
                     <PhoneCall className="h-4 w-4" />
