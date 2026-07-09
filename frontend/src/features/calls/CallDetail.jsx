@@ -42,7 +42,7 @@ export default function CallDetail({ id, onBack }) {
               )}
               {(call.transcripts || []).map((t) => (
                 <div key={t.id} className={`flex gap-3 ${t.role === 'ai' ? '' : 'flex-row-reverse'}`}>
-                  <div className={`flex-shrink-0 h-7 w-7 rounded-full flex items-center justify-center text-xs font-medium ${
+                  <div className={`shrink-0 h-7 w-7 rounded-full flex items-center justify-center text-xs font-medium ${
                     t.role === 'ai' ? 'bg-indigo-100 text-indigo-700' : 'bg-gray-100 text-gray-700'
                   }`}>
                     {t.role === 'ai' ? 'AI' : 'C'}

@@ -291,7 +291,7 @@ export default function ManualDial() {
             value={prompt}
             onChange={(e) => setPrompt(e.target.value)}
             rows={3}
-            className="w-full rounded-lg border border-border bg-background px-3.5 py-2.5 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/25 focus:border-primary/40 transition-colors resize-none font-mono text-xs leading-relaxed"
+            className="w-full rounded-lg border border-border bg-background px-3.5 py-2.5 text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/25 focus:border-primary/40 transition-colors resize-none font-mono text-xs leading-relaxed"
             disabled={isLoading}
           />
         </div>

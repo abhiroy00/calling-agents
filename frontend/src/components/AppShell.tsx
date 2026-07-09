@@ -291,7 +291,7 @@ export default function AppShell({ children }: { children: ReactNode }) {
                   {(user?.name || user?.email || "U").slice(0, 1).toUpperCase()}
                 </div>
                 <div className="hidden min-w-0 pr-1 sm:block">
-                  <p className="max-w-[140px] truncate text-[12px] font-semibold leading-tight text-foreground">
+                  <p className="max-w-35 truncate text-[12px] font-semibold leading-tight text-foreground">
                     {user?.name || user?.email || "Operator"}
                   </p>
                   <p className="text-[10px] leading-tight text-muted-foreground">Admin · Free</p>
