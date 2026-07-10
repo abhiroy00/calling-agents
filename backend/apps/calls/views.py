@@ -6,6 +6,9 @@ from django.http import HttpResponse
 from django.utils import timezone
 from asgiref.sync import async_to_sync
 from channels.layers import get_channel_layer
+from drf_spectacular.utils import extend_schema, inline_serializer, OpenApiResponse
+from drf_spectacular.types import OpenApiTypes
+from rest_framework import serializers as drf_serializers
 from .models import Call, Transcript
 from .serializers import CallSerializer, CallDetailSerializer
 
@@ -33,6 +36,14 @@ class CallDetailView(generics.RetrieveAPIView):
     serializer_class = CallDetailSerializer
 
 
+@extend_schema(
+    request=OpenApiTypes.OBJECT,
+    responses=OpenApiResponse(OpenApiTypes.STR, description="Plain 'OK'."),
+    summary='Exotel call-status webhook',
+    description='Exotel POSTs form-encoded call lifecycle events (Status, CallSid). '
+                'On terminal statuses, disposition is detected and post-call '
+                'data collection is triggered.',
+)
 class StatusCallbackView(APIView):
     """Exotel POSTs call lifecycle events here."""
     permission_classes = [AllowAny]
@@ -96,6 +107,18 @@ class StatusCallbackView(APIView):
 class ManualDialView(APIView):
     permission_classes = [IsAuthenticated]
 
+    @extend_schema(
+        request=inline_serializer(
+            'ManualDialRequest',
+            {
+                'phone': drf_serializers.CharField(),
+                'name': drf_serializers.CharField(required=False),
+                'system_prompt': drf_serializers.CharField(required=False),
+            },
+        ),
+        responses=OpenApiResponse(OpenApiTypes.OBJECT, description='Created call id, status and provider sid.'),
+        summary='Dial a single number now',
+    )
     def post(self, request):
         from apps.leads.models import Lead
         from .exotel_client import dial

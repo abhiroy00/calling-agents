@@ -10,7 +10,7 @@ class CampaignSerializer(serializers.ModelSerializer):
         fields = '__all__'
         read_only_fields = ('id', 'status', 'created_by', 'created_at', 'updated_at')
 
-    def get_lead_count(self, obj):
+    def get_lead_count(self, obj) -> int:
         return obj.campaign_leads.count()
 
     def create(self, validated_data):

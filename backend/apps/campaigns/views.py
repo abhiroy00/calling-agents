@@ -1,9 +1,11 @@
-from rest_framework import generics, status
+from rest_framework import generics, status, serializers as drf_serializers
 from rest_framework.decorators import action
 from rest_framework.response import Response
 from rest_framework.views import APIView
 from django.db.models import Q
 from django.shortcuts import get_object_or_404
+from drf_spectacular.utils import extend_schema, inline_serializer, OpenApiResponse
+from drf_spectacular.types import OpenApiTypes
 from .models import Campaign, CampaignLead
 from .serializers import CampaignSerializer, CampaignLeadSerializer
 from apps.leads.models import Lead
@@ -29,6 +31,7 @@ class CampaignDetailView(generics.RetrieveUpdateDestroyAPIView):
         return ctx
 
 
+@extend_schema(request=None, responses=CampaignSerializer, summary='Start campaign dialing')
 class CampaignStartView(APIView):
     def post(self, request, pk):
         campaign = get_object_or_404(Campaign, pk=pk)
@@ -41,6 +44,7 @@ class CampaignStartView(APIView):
         return Response(CampaignSerializer(campaign).data)
 
 
+@extend_schema(request=None, responses=CampaignSerializer, summary='Pause campaign')
 class CampaignPauseView(APIView):
     def post(self, request, pk):
         campaign = get_object_or_404(Campaign, pk=pk)
@@ -49,6 +53,7 @@ class CampaignPauseView(APIView):
         return Response(CampaignSerializer(campaign).data)
 
 
+@extend_schema(request=None, responses=CampaignSerializer, summary='Stop campaign')
 class CampaignStopView(APIView):
     def post(self, request, pk):
         campaign = get_object_or_404(Campaign, pk=pk)
@@ -57,6 +62,20 @@ class CampaignStopView(APIView):
         return Response(CampaignSerializer(campaign).data)
 
 
+@extend_schema(
+    request=inline_serializer(
+        'CampaignAddLeadsRequest',
+        {
+            'lead_ids': drf_serializers.ListField(child=drf_serializers.IntegerField(), required=False),
+            'all': drf_serializers.BooleanField(required=False),
+            'search': drf_serializers.CharField(required=False),
+        },
+    ),
+    responses=inline_serializer('CampaignAddLeadsResult', {'added': drf_serializers.IntegerField()}),
+    summary='Attach leads to a campaign',
+    description='Either pass explicit lead_ids, or {"all": true} to attach every lead '
+                '(optionally narrowed by "search"). Idempotent — already-attached leads are skipped.',
+)
 class CampaignAddLeadsView(APIView):
     def post(self, request, pk):
         campaign = get_object_or_404(Campaign, pk=pk)

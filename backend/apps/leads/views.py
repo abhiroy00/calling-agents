@@ -1,8 +1,9 @@
 from rest_framework import generics, filters, status
 from rest_framework.views import APIView
 from rest_framework.response import Response
+from drf_spectacular.utils import extend_schema
 from .models import Lead
-from .serializers import LeadSerializer, BulkLeadRowSerializer
+from .serializers import LeadSerializer, BulkLeadRowSerializer, BulkUploadResultSerializer
 
 
 class LeadListView(generics.ListAPIView):
@@ -14,6 +15,13 @@ class LeadListView(generics.ListAPIView):
 
 
 class BulkUploadView(APIView):
+    @extend_schema(
+        request=BulkLeadRowSerializer(many=True),
+        responses=BulkUploadResultSerializer,
+        summary='Bulk-create leads',
+        description='Accepts a JSON array of lead rows. Skips duplicates (by phone) '
+                    'and reports any invalid rows.',
+    )
     def post(self, request):
         rows = request.data if isinstance(request.data, list) else request.data.get('leads', [])
         created_count = 0

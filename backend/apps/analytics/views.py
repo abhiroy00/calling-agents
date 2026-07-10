@@ -4,10 +4,23 @@ from django.db.models import Count, Avg, Q
 from django.db.models.functions import TruncDate
 from django.utils import timezone
 import datetime
+from drf_spectacular.utils import extend_schema, OpenApiParameter, OpenApiResponse
+from drf_spectacular.types import OpenApiTypes
 from apps.calls.models import Call
 
 
 class AnalyticsSummaryView(APIView):
+    @extend_schema(
+        parameters=[
+            OpenApiParameter('campaign', OpenApiTypes.INT, description='Limit to one campaign id.'),
+        ],
+        responses=OpenApiResponse(
+            OpenApiTypes.OBJECT,
+            description='Aggregate call metrics: totals, connect rate, dispositions, '
+                        'calls-per-day (last 14 days) and average duration.',
+        ),
+        summary='Call analytics summary',
+    )
     def get(self, request):
         campaign_id = request.query_params.get('campaign')
         qs = Call.objects.all()

@@ -23,6 +23,7 @@ INSTALLED_APPS = [
     'corsheaders',
     'channels',
     'django_celery_beat',
+    'drf_spectacular',
     'apps.accounts',
     'apps.leads',
     'apps.campaigns',
@@ -103,6 +104,16 @@ REST_FRAMEWORK = {
     ),
     'DEFAULT_PAGINATION_CLASS': 'rest_framework.pagination.PageNumberPagination',
     'PAGE_SIZE': 50,
+    'DEFAULT_SCHEMA_CLASS': 'drf_spectacular.openapi.AutoSchema',
+}
+
+SPECTACULAR_SETTINGS = {
+    'TITLE': 'Calling Agents API',
+    'DESCRIPTION': 'AI voice-calling CRM: leads, campaigns, calls, transcripts, '
+                   'post-call data collection and analytics.',
+    'VERSION': '1.0.0',
+    'SERVE_INCLUDE_SCHEMA': False,  # hide the raw /schema/ endpoint from the docs UI
+    'SWAGGER_UI_SETTINGS': {'persistAuthorization': True},
 }
 
 SIMPLE_JWT = {
