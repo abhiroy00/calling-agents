@@ -84,7 +84,11 @@ export function downloadLeadTemplate(): void {
   triggerCsvDownload(lines, "leads-import-template.csv");
 }
 
-const PHONE_RE = /^[+\d\s\-().]{7,20}$/;
+// A phone is valid if it carries at least this many digits, matching the
+// backend (BulkLeadRowSerializer.validate_phone strips non-digits, needs >= 7).
+// We deliberately do NOT reject spaces, dashes, +, commas, etc. — Excel and
+// contact exports add those, and the backend normalizes the number anyway.
+const PHONE_MIN_DIGITS = 7;
 
 export interface ValidatedRows {
   valid: any[];
@@ -97,23 +101,34 @@ export function validateRows(
   mapping: Record<string, string>,
 ): ValidatedRows {
   const valid: any[] = [];
-  const dupePhones = new Set<string>();
+  const seenDigits = new Set<string>();
   const invalid: { row: any; reason: string }[] = [];
 
   for (const row of rows) {
-    const phone = String(row[mapping.phone] || "").trim();
-    if (!PHONE_RE.test(phone)) {
-      invalid.push({ row, reason: "Invalid phone format" });
+    const phone = String(row[mapping.phone] ?? "").trim();
+    const digits = phone.replace(/\D/g, "");
+
+    if (!phone) {
+      invalid.push({ row, reason: "Missing phone number" });
       continue;
     }
-    if (dupePhones.has(phone)) continue;
-    dupePhones.add(phone);
+    if (digits.length < PHONE_MIN_DIGITS) {
+      invalid.push({
+        row,
+        reason: `Only ${digits.length} digit${digits.length === 1 ? "" : "s"} found — need at least ${PHONE_MIN_DIGITS}`,
+      });
+      continue;
+    }
+    // Dedupe by digits so "+91 98765 43210" and "9876543210" count as one.
+    if (seenDigits.has(digits)) continue;
+    seenDigits.add(digits);
+
     const mapped: any = { phone, extra_data: {} };
     for (const [field, col] of Object.entries(mapping)) {
       if (field === "phone") continue;
       if (col === "__ignore__") continue;
       if (["name", "company", "email"].includes(field)) {
-        mapped[field] = String(row[col] || "").trim();
+        mapped[field] = String(row[col] ?? "").trim();
       } else {
         mapped.extra_data[field] = row[col];
       }

@@ -828,6 +828,41 @@ function UploadDrawer({ onClose }: { onClose: () => void }) {
                   </tbody>
                 </table>
               </div>
+
+              {preview.invalid.length > 0 && (
+                <div className="mt-4">
+                  <p className="mb-2 text-xs font-semibold text-destructive">
+                    {preview.invalid.length} row{preview.invalid.length === 1 ? "" : "s"} skipped
+                  </p>
+                  <div className="overflow-hidden rounded-lg border border-destructive/30">
+                    <table className="w-full text-sm">
+                      <thead className="bg-destructive/10 text-[10px] uppercase tracking-widest text-muted-foreground">
+                        <tr>
+                          <th className="px-3 py-2 text-left">Phone value</th>
+                          <th className="px-3 py-2 text-left">Reason</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {preview.invalid.slice(0, 6).map((r, i) => (
+                          <tr key={i} className="border-t border-destructive/20">
+                            <td className="px-3 py-2 font-mono text-xs">
+                              {String(r.row[buildLeadMapping().phone] ?? "").trim() || "—"}
+                            </td>
+                            <td className="px-3 py-2 text-xs text-muted-foreground">{r.reason}</td>
+                          </tr>
+                        ))}
+                        {preview.invalid.length > 6 && (
+                          <tr className="border-t border-destructive/20">
+                            <td colSpan={2} className="px-3 py-2 text-center text-xs text-muted-foreground">
+                              +{preview.invalid.length - 6} more
+                            </td>
+                          </tr>
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
             </div>
           )}
 
