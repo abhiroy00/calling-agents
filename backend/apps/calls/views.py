@@ -29,7 +29,7 @@ class CallListView(generics.ListAPIView):
 
 
 class CallDetailView(generics.RetrieveAPIView):
-    queryset = Call.objects.prefetch_related('transcripts').all()
+    queryset = Call.objects.select_related('data').prefetch_related('transcripts', 'emails').all()
     serializer_class = CallDetailSerializer
 
 
@@ -82,6 +82,10 @@ class StatusCallbackView(APIView):
                 'status': db_status,
                 'disposition': disposition,
             })
+            # Extract configured data from the transcript and fire off emails.
+            if transcript_text.strip():
+                from .tasks import process_call_outcome
+                process_call_outcome.delay(pk)
         else:
             Call.objects.filter(pk=pk).update(status=db_status, twilio_sid=call.twilio_sid)
             _broadcast({'type': 'call.status', 'call_id': pk, 'status': db_status})

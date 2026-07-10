@@ -165,6 +165,21 @@ ELEVENLABS_VOICE_ID = config('ELEVENLABS_VOICE_ID', default='OtEfb2LVzIE45wdYe54
 ELEVENLABS_MODEL = config('ELEVENLABS_MODEL', default='eleven_flash_v2_5')
 PUBLIC_HOST = config('PUBLIC_HOST', default='localhost:8000')
 
+# --- Email (post-call summaries & lead follow-ups) ---
+# With no EMAIL_HOST set, fall back to the console backend so dev never fails
+# silently — emails print to the server log instead of being sent.
+EMAIL_HOST = config('EMAIL_HOST', default='')
+if EMAIL_HOST:
+    EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
+    EMAIL_PORT = config('EMAIL_PORT', default=587, cast=int)
+    EMAIL_HOST_USER = config('EMAIL_HOST_USER', default='')
+    EMAIL_HOST_PASSWORD = config('EMAIL_HOST_PASSWORD', default='')
+    EMAIL_USE_TLS = config('EMAIL_USE_TLS', default=True, cast=bool)
+    EMAIL_USE_SSL = config('EMAIL_USE_SSL', default=False, cast=bool)
+else:
+    EMAIL_BACKEND = 'django.core.mail.backends.console.EmailBackend'
+DEFAULT_FROM_EMAIL = config('DEFAULT_FROM_EMAIL', default='no-reply@callingagents.local')
+
 # Behind the nginx TLS proxy: trust its X-Forwarded-Proto so request.is_secure()
 # and admin CSRF checks work over https.
 SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
