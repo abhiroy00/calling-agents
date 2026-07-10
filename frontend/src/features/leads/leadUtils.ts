@@ -31,6 +31,41 @@ export function parseFile(file: File): Promise<ParsedFile> {
   });
 }
 
+// The columns the importer understands. `phone` is required; the rest are
+// optional. Any extra columns a user adds are kept as custom lead data.
+export const TEMPLATE_HEADERS = ["phone", "name", "company", "email"] as const;
+
+const TEMPLATE_SAMPLE_ROWS: string[][] = [
+  ["+919876543210", "Aarav Sharma", "Acme Pvt Ltd", "aarav@acme.in"],
+  ["9123456780", "Priya Patel", "Nova Retail", "priya.patel@nova.in"],
+  ["+918000012345", "Rahul Verma", "", ""],
+];
+
+function csvCell(value: string): string {
+  // Quote cells containing comma, quote, or newline; escape inner quotes.
+  return /[",\n]/.test(value) ? `"${value.replace(/"/g, '""')}"` : value;
+}
+
+/** Build and download a sample CSV so users can see the expected import format. */
+export function downloadLeadTemplate(): void {
+  const lines = [
+    TEMPLATE_HEADERS.join(","),
+    ...TEMPLATE_SAMPLE_ROWS.map((row) => row.map(csvCell).join(",")),
+  ];
+  // Prepend a UTF-8 BOM so Excel opens non-ASCII names correctly.
+  const blob = new Blob(["﻿" + lines.join("\r\n")], {
+    type: "text/csv;charset=utf-8;",
+  });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = "leads-import-template.csv";
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+}
+
 const PHONE_RE = /^[+\d\s\-().]{7,20}$/;
 
 export interface ValidatedRows {
