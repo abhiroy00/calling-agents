@@ -8,6 +8,8 @@ export function PageHeader({
   actions,
   tabs,
   eyebrow,
+  activeTab,
+  onTabChange,
 }: {
   title: string;
   subtitle?: string;
@@ -38,7 +40,13 @@ export function PageHeader({
       {tabs && tabs.length > 0 && (
         <div className="mt-4 flex items-center gap-1 border-b border-border overflow-x-auto">
           {tabs.map((t, i) => (
-            <TabButton key={t.value} label={t.label} count={t.count} active={i === 0} />
+            <TabButton
+              key={t.value}
+              label={t.label}
+              count={t.count}
+              active={activeTab != null ? activeTab === t.value : i === 0}
+              onClick={onTabChange ? () => onTabChange(t.value) : undefined}
+            />
           ))}
         </div>
       )}
@@ -46,9 +54,20 @@ export function PageHeader({
   );
 }
 
-function TabButton({ label, count, active }: { label: string; count?: number; active?: boolean }) {
+function TabButton({
+  label,
+  count,
+  active,
+  onClick,
+}: {
+  label: string;
+  count?: number;
+  active?: boolean;
+  onClick?: () => void;
+}) {
   return (
     <button
+      onClick={onClick}
       className={cn(
         "relative -mb-px inline-flex items-center gap-1.5 whitespace-nowrap px-3 py-2.5 text-[13px] font-medium transition-colors",
         active

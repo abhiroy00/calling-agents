@@ -8,16 +8,12 @@ import {
   ArrowLeft,
   Check,
   X,
-  SlidersHorizontal,
   Download,
-  Users,
   Phone,
   Building2,
   Mail,
-  MoreHorizontal,
   UserPlus,
   HelpCircle,
-  
   FileText,
   ArrowUp,
   ArrowDown,
@@ -32,6 +28,7 @@ import {
   parseFile,
   validateRows,
   downloadLeadTemplate,
+  exportLeadsToCsv,
   TEMPLATE_HEADERS,
   type ValidatedRows,
 } from "@/features/leads/leadUtils";
@@ -141,10 +138,23 @@ const SCHEMA_FIELDS = ["phone", "name", "company", "email", "__ignore__"] as con
 
 type SortKey = "name" | "company" | "phone" | "status" | "created_at";
 type SortDir = "asc" | "desc";
+type FilterVal = "all" | "new" | "called" | "uncontacted";
+
+// Lead.status values that count as "already contacted" vs "not yet contacted".
+const CONTACTED = new Set(["called", "interested", "not_interested", "callback"]);
+const UNCONTACTED = new Set(["new", "queued"]);
+
+function matchesFilter(lead: any, f: FilterVal): boolean {
+  const s = lead.status || "new";
+  if (f === "all") return true;
+  if (f === "new") return s === "new";
+  if (f === "called") return CONTACTED.has(s);
+  return UNCONTACTED.has(s); // uncontacted
+}
 
 function LeadsPage() {
   const [search, setSearch] = useState("");
-  const [filter, setFilter] = useState<"all" | "new" | "called" | "not_called">("all");
+  const [filter, setFilter] = useState<FilterVal>("all");
   const { data, isFetching } = useGetLeadsQuery({ search });
   const [uploadOpen, setUploadOpen] = useState(false);
   const [helpOpen, setHelpOpen] = useState(false);
@@ -152,12 +162,27 @@ function LeadsPage() {
   const [sortDir, setSortDir] = useState<SortDir>("desc");
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(25);
+  const [selected, setSelected] = useState<Set<number>>(new Set());
 
   const allLeads = data?.results || [];
-  const count = data?.count ?? allLeads.length ?? 0;
+  const totalCount = data?.count ?? allLeads.length ?? 0;
+
+  const statusCounts = useMemo(
+    () => ({
+      new: allLeads.filter((l: any) => (l.status || "new") === "new").length,
+      called: allLeads.filter((l: any) => CONTACTED.has(l.status)).length,
+      uncontacted: allLeads.filter((l: any) => UNCONTACTED.has(l.status || "new")).length,
+    }),
+    [allLeads],
+  );
+
+  const filteredLeads = useMemo(
+    () => allLeads.filter((l: any) => matchesFilter(l, filter)),
+    [allLeads, filter],
+  );
 
   const sortedLeads = useMemo(() => {
-    const arr = [...allLeads];
+    const arr = [...filteredLeads];
     arr.sort((a: any, b: any) => {
       const av = a?.[sortKey];
       const bv = b?.[sortKey];
@@ -173,7 +198,7 @@ function LeadsPage() {
       return sortDir === "asc" ? cmp : -cmp;
     });
     return arr;
-  }, [allLeads, sortKey, sortDir]);
+  }, [filteredLeads, sortKey, sortDir]);
 
   const totalPages = Math.max(1, Math.ceil(sortedLeads.length / pageSize));
   const currentPage = Math.min(page, totalPages);
@@ -192,22 +217,61 @@ function LeadsPage() {
     setPage(1);
   }
 
+  function changeFilter(f: FilterVal) {
+    setFilter(f);
+    setPage(1);
+  }
+
+  function toggleOne(id: number) {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      next.has(id) ? next.delete(id) : next.add(id);
+      return next;
+    });
+  }
+
+  // Select-all toggles every lead on the current page.
+  const pageAllSelected = leads.length > 0 && leads.every((l: any) => selected.has(l.id));
+  function toggleAllOnPage() {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (pageAllSelected) leads.forEach((l: any) => next.delete(l.id));
+      else leads.forEach((l: any) => next.add(l.id));
+      return next;
+    });
+  }
+
+  // Export selected leads if any are ticked, otherwise the current filtered view.
+  function handleExport() {
+    const rows = selected.size
+      ? allLeads.filter((l: any) => selected.has(l.id))
+      : sortedLeads;
+    if (rows.length) exportLeadsToCsv(rows);
+  }
+
   return (
     <div className="mx-auto max-w-7xl">
       <PageHeader
         eyebrow="People"
         title="Leads"
-        subtitle={`${count} contacts in your workspace · synced 2m ago`}
+        subtitle={`${totalCount} contacts in your workspace`}
         tabs={[
-          { label: "All leads", value: "all", count },
-          { label: "My leads", value: "mine" },
-          { label: "Recently called", value: "called" },
-          { label: "Uncontacted", value: "uncontacted" },
+          { label: "All leads", value: "all", count: totalCount },
+          { label: "New", value: "new", count: statusCounts.new },
+          { label: "Called", value: "called", count: statusCounts.called },
+          { label: "Uncontacted", value: "uncontacted", count: statusCounts.uncontacted },
         ]}
+        activeTab={filter}
+        onTabChange={(v) => changeFilter(v as FilterVal)}
         actions={
           <>
-            <button className="hidden items-center gap-1.5 rounded-lg border border-border bg-background px-2.5 py-2 text-xs font-medium text-muted-foreground hover:border-primary/30 hover:text-foreground sm:inline-flex">
-              <Download className="h-3.5 w-3.5" /> Export
+            <button
+              onClick={handleExport}
+              disabled={totalCount === 0}
+              className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-background px-2.5 py-2 text-xs font-medium text-muted-foreground transition-colors hover:border-primary/30 hover:text-foreground disabled:cursor-not-allowed disabled:opacity-40"
+            >
+              <Download className="h-3.5 w-3.5" />
+              {selected.size ? `Export (${selected.size})` : "Export"}
             </button>
             <button
               onClick={() => setUploadOpen(true)}
@@ -232,18 +296,14 @@ function LeadsPage() {
           />
         </div>
         <div className="flex flex-wrap items-center gap-1.5">
-          <Chip label="All" active={filter === "all"} onClick={() => setFilter("all")} />
-          <Chip label="New" active={filter === "new"} onClick={() => setFilter("new")} />
-          <Chip label="Called" active={filter === "called"} onClick={() => setFilter("called")} />
+          <Chip label="All" active={filter === "all"} onClick={() => changeFilter("all")} />
+          <Chip label="New" active={filter === "new"} onClick={() => changeFilter("new")} />
+          <Chip label="Called" active={filter === "called"} onClick={() => changeFilter("called")} />
           <Chip
             label="Not called"
-            active={filter === "not_called"}
-            onClick={() => setFilter("not_called")}
+            active={filter === "uncontacted"}
+            onClick={() => changeFilter("uncontacted")}
           />
-          <span className="mx-1 hidden h-5 w-px bg-border sm:inline-block" />
-          <button className="inline-flex items-center gap-1 rounded-full border border-border bg-background px-2.5 py-1 text-[11.5px] font-medium text-muted-foreground hover:border-primary/30 hover:text-foreground">
-            <SlidersHorizontal className="h-3 w-3" /> More filters
-          </button>
         </div>
       </div>
 
@@ -261,10 +321,28 @@ function LeadsPage() {
               </>
             )}
           </span>
-          <span className="inline-flex items-center gap-1.5">
-            <span className="h-1.5 w-1.5 rounded-full bg-success" />
-            Live sync
-          </span>
+          {selected.size > 0 ? (
+            <span className="inline-flex items-center gap-2">
+              <span className="font-medium text-foreground">{selected.size} selected</span>
+              <button
+                onClick={handleExport}
+                className="inline-flex items-center gap-1 rounded-md border border-primary/40 bg-primary/5 px-2 py-0.5 text-[11px] font-medium text-primary hover:bg-primary/10"
+              >
+                <Download className="h-3 w-3" /> Export
+              </button>
+              <button
+                onClick={() => setSelected(new Set())}
+                className="text-[11px] font-medium text-muted-foreground hover:text-foreground"
+              >
+                Clear
+              </button>
+            </span>
+          ) : (
+            <span className="inline-flex items-center gap-1.5">
+              <span className="h-1.5 w-1.5 rounded-full bg-success" />
+              Live sync
+            </span>
+          )}
         </div>
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
@@ -273,6 +351,8 @@ function LeadsPage() {
                 <th className="w-10 px-4 py-2.5 text-left">
                   <input
                     type="checkbox"
+                    checked={pageAllSelected}
+                    onChange={toggleAllOnPage}
                     className="h-3.5 w-3.5 rounded border-border accent-primary"
                     aria-label="Select all"
                   />
@@ -282,20 +362,19 @@ function LeadsPage() {
                 <SortableTh label="Phone" k="phone" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} />
                 <SortableTh label="Status" k="status" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} />
                 <SortableTh label="Added" k="created_at" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} />
-                <th className="w-10 px-3 py-2.5"></th>
               </tr>
             </thead>
             <tbody>
               {isFetching && (
                 <tr>
-                  <td colSpan={7} className="px-4 py-14 text-center text-sm text-muted-foreground">
+                  <td colSpan={6} className="px-4 py-14 text-center text-sm text-muted-foreground">
                     Loading leads…
                   </td>
                 </tr>
               )}
               {!isFetching && leads.length === 0 && (
                 <tr>
-                  <td colSpan={7} className="p-0">
+                  <td colSpan={6} className="p-0">
                     <EmptyState
                       icon={UserPlus}
                       title="Add your first lead"
@@ -330,6 +409,8 @@ function LeadsPage() {
                   <td className="px-4 py-3">
                     <input
                       type="checkbox"
+                      checked={selected.has(lead.id)}
+                      onChange={() => toggleOne(lead.id)}
                       className="h-3.5 w-3.5 rounded border-border accent-primary"
                       aria-label={`Select ${lead.name || lead.phone}`}
                     />
@@ -373,14 +454,6 @@ function LeadsPage() {
                   </td>
                   <td className="px-3 py-3 text-[12px] text-muted-foreground tabular">
                     {lead.created_at ? new Date(lead.created_at).toLocaleDateString() : "—"}
-                  </td>
-                  <td className="px-3 py-3 text-right">
-                    <button
-                      className="grid h-7 w-7 place-items-center rounded-md text-muted-foreground opacity-0 transition-opacity hover:bg-muted hover:text-foreground group-hover:opacity-100"
-                      aria-label="Row actions"
-                    >
-                      <MoreHorizontal className="h-4 w-4" />
-                    </button>
                   </td>
                 </tr>
               ))}

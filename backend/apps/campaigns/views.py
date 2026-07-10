@@ -2,6 +2,7 @@ from rest_framework import generics, status
 from rest_framework.decorators import action
 from rest_framework.response import Response
 from rest_framework.views import APIView
+from django.db.models import Q
 from django.shortcuts import get_object_or_404
 from .models import Campaign, CampaignLead
 from .serializers import CampaignSerializer, CampaignLeadSerializer
@@ -59,14 +60,38 @@ class CampaignStopView(APIView):
 class CampaignAddLeadsView(APIView):
     def post(self, request, pk):
         campaign = get_object_or_404(Campaign, pk=pk)
-        lead_ids = request.data.get('lead_ids', [])
-        created = 0
-        for i, lead_id in enumerate(lead_ids):
-            lead = get_object_or_404(Lead, pk=lead_id)
-            _, was_created = CampaignLead.objects.get_or_create(
-                campaign=campaign, lead=lead,
-                defaults={'call_order': i}
-            )
-            if was_created:
-                created += 1
-        return Response({'added': created})
+
+        # Two modes: an explicit list of lead_ids, or "add every lead" (optionally
+        # narrowed by the same search used on the Leads page).
+        if request.data.get('all'):
+            leads_qs = Lead.objects.all()
+            search = (request.data.get('search') or '').strip()
+            if search:
+                leads_qs = leads_qs.filter(
+                    Q(phone__icontains=search) | Q(name__icontains=search)
+                    | Q(company__icontains=search) | Q(email__icontains=search)
+                )
+            lead_ids = list(leads_qs.values_list('id', flat=True))
+        else:
+            lead_ids = request.data.get('lead_ids', [])
+
+        # Continue numbering after any leads already on the campaign, and skip
+        # leads already attached so re-adding is idempotent.
+        next_order = CampaignLead.objects.filter(campaign=campaign).count()
+        existing = set(
+            CampaignLead.objects.filter(campaign=campaign, lead_id__in=lead_ids)
+            .values_list('lead_id', flat=True)
+        )
+        to_create = []
+        for lead_id in lead_ids:
+            if lead_id in existing:
+                continue
+            existing.add(lead_id)
+            to_create.append(CampaignLead(
+                campaign=campaign, lead_id=lead_id, call_order=next_order,
+            ))
+            next_order += 1
+
+        if to_create:
+            CampaignLead.objects.bulk_create(to_create)
+        return Response({'added': len(to_create)})

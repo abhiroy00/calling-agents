@@ -1,13 +1,15 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, Link } from "@tanstack/react-router";
 import { useState } from "react";
-import { Play, Pause, Square, Plus, X, Megaphone, Filter } from "lucide-react";
+import { Play, Pause, Square, Plus, X, Megaphone, Filter, Search, Users, Phone } from "lucide-react";
 import {
   useCreateCampaignMutation,
   useGetCampaignsQuery,
   usePauseCampaignMutation,
   useStartCampaignMutation,
   useStopCampaignMutation,
+  useAddLeadsToCampaignMutation,
 } from "@/features/campaigns/campaignsApi";
+import { useGetLeadsQuery } from "@/features/leads/leadsApi";
 import { PageHeader, Chip, EmptyState } from "@/components/PageHeader";
 import StatusBadge from "@/components/StatusBadge";
 
@@ -154,14 +156,51 @@ function CampaignBuilder({ onClose }: { onClose: () => void }) {
     rate_limit_per_min: 5,
   });
   const [create, { isLoading, error }] = useCreateCampaignMutation();
+  const [addLeads, { isLoading: addingLeads }] = useAddLeadsToCampaignMutation();
+
+  // --- Lead selection ---
+  const [leadMode, setLeadMode] = useState<"all" | "select">("all");
+  const [leadSearch, setLeadSearch] = useState("");
+  const [selected, setSelected] = useState<Set<number>>(new Set());
+  const [leadError, setLeadError] = useState("");
+  const { data: leadData, isFetching: leadsLoading } = useGetLeadsQuery({
+    search: leadSearch,
+  });
+  const leads: any[] = leadData?.results || leadData || [];
+  const leadCount: number = leadData?.count ?? leads.length;
+
+  function toggleLead(id: number) {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      next.has(id) ? next.delete(id) : next.add(id);
+      return next;
+    });
+  }
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
+    setLeadError("");
+    // A campaign with no leads has nothing to dial — require a selection.
+    if (leadMode === "select" && selected.size === 0) {
+      setLeadError("Pick at least one lead, or switch to “Add all leads”.");
+      return;
+    }
+    if (leadMode === "all" && leadCount === 0) {
+      setLeadError("There are no leads to add yet. Upload leads first.");
+      return;
+    }
     try {
-      await create(form).unwrap();
+      const campaign = await create(form).unwrap();
+      if (leadMode === "all") {
+        await addLeads({ id: campaign.id, all: true, search: leadSearch || undefined }).unwrap();
+      } else {
+        await addLeads({ id: campaign.id, lead_ids: [...selected] }).unwrap();
+      }
       onClose();
     } catch {}
   }
+
+  const submitting = isLoading || addingLeads;
 
   return (
     <div className="fixed inset-0 z-50 flex">
@@ -231,6 +270,103 @@ function CampaignBuilder({ onClose }: { onClose: () => void }) {
             />
           </Field>
 
+          <Field label="Leads to call">
+            {/* Mode toggle: every lead, or a hand-picked subset. */}
+            <div className="mb-3 inline-flex rounded-lg border border-border p-0.5">
+              <button
+                type="button"
+                onClick={() => setLeadMode("all")}
+                className={`rounded-md px-3 py-1.5 text-xs font-medium transition-colors ${
+                  leadMode === "all"
+                    ? "bg-primary text-primary-foreground"
+                    : "text-muted-foreground hover:text-foreground"
+                }`}
+              >
+                Add all leads
+              </button>
+              <button
+                type="button"
+                onClick={() => setLeadMode("select")}
+                className={`rounded-md px-3 py-1.5 text-xs font-medium transition-colors ${
+                  leadMode === "select"
+                    ? "bg-primary text-primary-foreground"
+                    : "text-muted-foreground hover:text-foreground"
+                }`}
+              >
+                Pick specific leads
+              </button>
+            </div>
+
+            <div className="relative mb-2">
+              <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+              <input
+                value={leadSearch}
+                onChange={(e) => setLeadSearch(e.target.value)}
+                placeholder="Search leads by name, phone, company, email…"
+                className={`${inputClass} pl-9`}
+              />
+            </div>
+
+            {leadCount === 0 && !leadsLoading ? (
+              <div className="rounded-lg border border-border bg-card/60 p-4 text-center text-xs text-muted-foreground">
+                No leads found.{" "}
+                <Link to="/leads" className="font-medium text-primary hover:underline">
+                  Upload leads first
+                </Link>{" "}
+                to start a campaign.
+              </div>
+            ) : leadMode === "all" ? (
+              <div className="flex items-center gap-2 rounded-lg border border-primary/30 bg-primary/5 px-3 py-2.5 text-xs text-foreground">
+                <Users className="h-4 w-4 text-primary" />
+                <span>
+                  All <span className="font-semibold">{leadCount}</span>
+                  {leadSearch ? " matching" : ""} lead{leadCount === 1 ? "" : "s"} will be added to
+                  this campaign.
+                </span>
+              </div>
+            ) : (
+              <div>
+                <div className="max-h-52 overflow-y-auto rounded-lg border border-border">
+                  {leadsLoading ? (
+                    <p className="p-4 text-center text-xs text-muted-foreground">Loading…</p>
+                  ) : (
+                    leads.map((l) => (
+                      <label
+                        key={l.id}
+                        className="flex cursor-pointer items-center gap-3 border-b border-border/60 px-3 py-2 text-sm last:border-0 hover:bg-accent/40"
+                      >
+                        <input
+                          type="checkbox"
+                          checked={selected.has(l.id)}
+                          onChange={() => toggleLead(l.id)}
+                          className="h-3.5 w-3.5 rounded border-border accent-primary"
+                        />
+                        <span className="min-w-0 flex-1 truncate text-foreground">
+                          {l.name || "Unnamed lead"}
+                        </span>
+                        <span className="inline-flex items-center gap-1 font-mono text-[11px] text-muted-foreground">
+                          <Phone className="h-3 w-3" />
+                          {l.phone}
+                        </span>
+                      </label>
+                    ))
+                  )}
+                </div>
+                <p className="mt-1.5 text-xs text-muted-foreground">
+                  {selected.size} selected
+                  {leadCount > leads.length && (
+                    <> · showing first {leads.length} of {leadCount} — search to narrow</>
+                  )}
+                </p>
+              </div>
+            )}
+            {!!leadError && (
+              <p className="mt-2 rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-xs text-destructive">
+                {leadError}
+              </p>
+            )}
+          </Field>
+
           <Field label="AI system prompt / script">
             <textarea
               rows={8}
@@ -259,10 +395,10 @@ function CampaignBuilder({ onClose }: { onClose: () => void }) {
             </button>
             <button
               type="submit"
-              disabled={isLoading}
+              disabled={submitting}
               className="inline-flex items-center gap-1.5 rounded-lg bg-primary px-4 py-2 text-xs font-semibold text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
             >
-              {isLoading ? "Creating…" : "Create campaign"}
+              {submitting ? "Creating…" : "Create campaign"}
             </button>
           </div>
         </form>

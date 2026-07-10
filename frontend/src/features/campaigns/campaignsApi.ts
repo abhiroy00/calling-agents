@@ -34,11 +34,19 @@ export const campaignsApi = baseApi.injectEndpoints({
       query: (id) => ({ url: `/campaigns/${id}/stop/`, method: "POST" }),
       invalidatesTags: ["Campaign"],
     }),
-    addLeadsToCampaign: build.mutation<any, { id: string | number; lead_ids: (string | number)[] }>({
-      query: ({ id, lead_ids }) => ({
+    addLeadsToCampaign: build.mutation<
+      { added: number },
+      {
+        id: string | number;
+        lead_ids?: (string | number)[];
+        all?: boolean;
+        search?: string;
+      }
+    >({
+      query: ({ id, ...body }) => ({
         url: `/campaigns/${id}/add-leads/`,
         method: "POST",
-        body: { lead_ids },
+        body,
       }),
       invalidatesTags: ["Campaign"],
     }),

@@ -46,12 +46,7 @@ function csvCell(value: string): string {
   return /[",\n]/.test(value) ? `"${value.replace(/"/g, '""')}"` : value;
 }
 
-/** Build and download a sample CSV so users can see the expected import format. */
-export function downloadLeadTemplate(): void {
-  const lines = [
-    TEMPLATE_HEADERS.join(","),
-    ...TEMPLATE_SAMPLE_ROWS.map((row) => row.map(csvCell).join(",")),
-  ];
+function triggerCsvDownload(lines: string[], filename: string): void {
   // Prepend a UTF-8 BOM so Excel opens non-ASCII names correctly.
   const blob = new Blob(["﻿" + lines.join("\r\n")], {
     type: "text/csv;charset=utf-8;",
@@ -59,11 +54,34 @@ export function downloadLeadTemplate(): void {
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
   a.href = url;
-  a.download = "leads-import-template.csv";
+  a.download = filename;
   document.body.appendChild(a);
   a.click();
   a.remove();
   URL.revokeObjectURL(url);
+}
+
+const EXPORT_COLUMNS = ["name", "phone", "company", "email", "status", "created_at"] as const;
+
+/** Export the given leads to a CSV file the user can re-import or archive. */
+export function exportLeadsToCsv(leads: Record<string, any>[]): void {
+  const lines = [
+    EXPORT_COLUMNS.join(","),
+    ...leads.map((lead) =>
+      EXPORT_COLUMNS.map((col) => csvCell(String(lead[col] ?? ""))).join(","),
+    ),
+  ];
+  const stamp = new Date().toISOString().slice(0, 10);
+  triggerCsvDownload(lines, `leads-export-${stamp}.csv`);
+}
+
+/** Build and download a sample CSV so users can see the expected import format. */
+export function downloadLeadTemplate(): void {
+  const lines = [
+    TEMPLATE_HEADERS.join(","),
+    ...TEMPLATE_SAMPLE_ROWS.map((row) => row.map(csvCell).join(",")),
+  ];
+  triggerCsvDownload(lines, "leads-import-template.csv");
 }
 
 const PHONE_RE = /^[+\d\s\-().]{7,20}$/;
