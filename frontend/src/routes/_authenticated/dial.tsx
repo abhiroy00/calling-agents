@@ -55,7 +55,7 @@ Keep answers short.
 
 Start with:
 
-"Hello! Main LeadGen+ ka AI Assistant bol raha hoon.`;
+"Hello! Main LeadGenplus ki AI Assistant bol rahi hoon.`;
 
 const KEYS = ["1", "2", "3", "4", "5", "6", "7", "8", "9", "*", "0", "⌫"];
 
