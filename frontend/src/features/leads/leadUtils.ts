@@ -138,11 +138,26 @@ export function downloadLeadTemplate(): void {
   triggerCsvDownload(lines, "leads-import-template.csv");
 }
 
-// A phone is valid if it carries at least this many digits, matching the
-// backend (BulkLeadRowSerializer.validate_phone strips non-digits, needs >= 7).
-// We deliberately do NOT reject spaces, dashes, +, commas, etc. — Excel and
-// contact exports add those, and the backend normalizes the number anyway.
+// Backend (BulkLeadRowSerializer.validate_phone) strips non-digits and requires
+// >= 7 digits. We normalize to E.164-ish form on the client so the payload is
+// always clean regardless of how the source file formatted the number.
 const PHONE_MIN_DIGITS = 7;
+const PHONE_MAX_DIGITS = 15; // ITU-T E.164 hard cap
+// Characters commonly used as visual separators in phone numbers.
+const PHONE_ALLOWED_SEPARATORS = /[\s\-().\u00A0\u2000-\u200A\u202F\u2060\u2011\u2012\u2013\u2014\/]/g;
+
+/**
+ * Normalize a raw phone string ("+91 98765-43210", "(98765) 43210", "98765.43210")
+ * into a compact form: an optional leading "+" followed by digits only.
+ * Returns null if the input contains characters other than digits, "+",
+ * or accepted separators — those are almost always typos or wrong columns.
+ */
+export function canonicalizePhone(raw: string): string | null {
+  const stripped = raw.replace(PHONE_ALLOWED_SEPARATORS, "");
+  // Allow a single leading "+" then digits only.
+  if (!/^\+?\d+$/.test(stripped)) return null;
+  return stripped;
+}
 
 export interface ValidatedRows {
   valid: any[];
@@ -159,10 +174,9 @@ export function validateRows(
   const invalid: { row: any; reason: string }[] = [];
 
   for (const row of rows) {
-    const { phone, truncated } = normalizePhoneValue(row[mapping.phone]);
-    const digits = phone.replace(/\D/g, "");
+    const { phone: rawPhone, truncated } = normalizePhoneValue(row[mapping.phone]);
 
-    if (!phone) {
+    if (!rawPhone) {
       invalid.push({ row, reason: "Missing phone number" });
       continue;
     }
@@ -173,6 +187,12 @@ export function validateRows(
       });
       continue;
     }
+    const canonical = canonicalizePhone(rawPhone);
+    if (!canonical) {
+      invalid.push({ row, reason: `Phone contains unsupported characters: "${rawPhone}"` });
+      continue;
+    }
+    const digits = canonical.replace(/\D/g, "");
     if (digits.length < PHONE_MIN_DIGITS) {
       invalid.push({
         row,
@@ -180,11 +200,18 @@ export function validateRows(
       });
       continue;
     }
-    // Dedupe by digits so "+91 98765 43210" and "9876543210" count as one.
+    if (digits.length > PHONE_MAX_DIGITS) {
+      invalid.push({
+        row,
+        reason: `Too many digits (${digits.length}) — max ${PHONE_MAX_DIGITS} per E.164`,
+      });
+      continue;
+    }
+    // Dedupe by digits so "+91 98765 43210" and "919876543210" count as one.
     if (seenDigits.has(digits)) continue;
     seenDigits.add(digits);
 
-    const mapped: any = { phone, extra_data: {} };
+    const mapped: any = { phone: canonical, extra_data: {} };
     for (const [field, col] of Object.entries(mapping)) {
       if (field === "phone") continue;
       if (col === "__ignore__") continue;
@@ -196,6 +223,7 @@ export function validateRows(
     }
     valid.push(mapped);
   }
+
 
   const dupeCount = rows.length - valid.length - invalid.length;
   return { valid, dupeCount: Math.max(dupeCount, 0), invalid };
