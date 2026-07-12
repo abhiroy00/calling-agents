@@ -37,23 +37,55 @@ function countSignificantDigits(raw: string): number {
 
 export function normalizePhoneValue(value: unknown): NormalizedPhone {
   if (value == null) return { phone: "", truncated: false };
+
   if (typeof value === "number") {
     if (!Number.isFinite(value)) return { phone: "", truncated: false };
-    const sig = countSignificantDigits(value.toString());
-    return { phone: value.toFixed(0), truncated: sig < MIN_SIGNIFICANT_DIGITS };
+    const asString = value.toString();
+    // A safe integer round-trips through toString without scientific notation
+    // and preserves full precision — trust it as-is. Truncation only happens
+    // when the value is non-integer (Excel stored it as a float) OR when the
+    // string form itself is in scientific notation.
+    const truncated =
+      !Number.isInteger(value) ||
+      /[eE]/.test(asString) ||
+      !Number.isSafeInteger(value);
+    return { phone: value.toFixed(0), truncated };
   }
-  const raw = String(value).trim();
+
+  let raw = String(value).trim();
   if (!raw) return { phone: "", truncated: false };
-  // Scientific-notation strings like "9.17464E+11"
-  if (/^-?\d+(\.\d+)?[eE][+-]?\d+$/.test(raw)) {
+
+  // Unwrap Excel's ="..." text-literal wrapper (single or double quoted, with
+  // optional surrounding whitespace). Our CSV template writes phones this way
+  // to survive round-tripping through Excel.
+  const litMatch = raw.match(/^=\s*(["'])(.*)\1\s*$/);
+  if (litMatch) raw = litMatch[2].trim();
+  // Also strip a plain leading apostrophe (Excel's text-force prefix).
+  if (raw.startsWith("'")) raw = raw.slice(1).trim();
+  if (!raw) return { phone: "", truncated: false };
+
+  // Scientific-notation strings like "9.17464E+11" — precision already lost.
+  if (/^-?\d+(?:\.\d+)?[eE][+-]?\d+$/.test(raw)) {
     const n = Number(raw);
-    if (Number.isFinite(n)) {
-      return {
-        phone: n.toFixed(0),
-        truncated: countSignificantDigits(raw) < MIN_SIGNIFICANT_DIGITS,
-      };
+    if (!Number.isFinite(n)) return { phone: "", truncated: false };
+    return {
+      phone: n.toFixed(0),
+      truncated: countSignificantDigits(raw) < MIN_SIGNIFICANT_DIGITS,
+    };
+  }
+
+  // Bare decimal like "9.17464E+11" written as "917464000000.0" — Excel
+  // sometimes emits a trailing .0 for float cells. Strip it, but if there
+  // were actual fractional digits the value is corrupt.
+  const decMatch = raw.match(/^(-?\d+)\.(\d+)$/);
+  if (decMatch) {
+    if (/^0+$/.test(decMatch[2])) {
+      raw = decMatch[1];
+    } else {
+      return { phone: raw, truncated: true };
     }
   }
+
   return { phone: raw, truncated: false };
 }
 
@@ -129,11 +161,17 @@ export function exportLeadsToCsv(leads: Record<string, any>[]): void {
   triggerCsvDownload(lines, `leads-export-${stamp}.csv`);
 }
 
-/** Build and download a sample CSV so users can see the expected import format. */
+/** Build and download a sample CSV so users can see the expected import
+ * format. We wrap phone numbers in Excel's `="..."` text-literal syntax so
+ * Excel does NOT convert long digits to floats (which would drop precision
+ * and produce "9.17464E+11"). Our importer unwraps `="..."` automatically. */
 export function downloadLeadTemplate(): void {
+  const wrapPhone = (v: string) => (v ? `="${v.replace(/"/g, '""')}"` : "");
   const lines = [
     TEMPLATE_HEADERS.join(","),
-    ...TEMPLATE_SAMPLE_ROWS.map((row) => row.map(csvCell).join(",")),
+    ...TEMPLATE_SAMPLE_ROWS.map(([phone, ...rest]) =>
+      [wrapPhone(phone), ...rest.map(csvCell)].join(","),
+    ),
   ];
   triggerCsvDownload(lines, "leads-import-template.csv");
 }
