@@ -1,7 +1,10 @@
 import { useState } from 'react'
+import { useDispatch, useSelector } from 'react-redux'
 import { validateRows } from './leadUtils'
 import { useBulkUploadMutation } from './leadsApi'
 import UploadPreview from './UploadPreview'
+import { trackLeads, selectLeadsRemaining } from '@/features/billing/billingSlice'
+import { toast } from 'sonner'
 
 const SCHEMA_FIELDS = ['phone', 'name', 'company', 'email', '__ignore__']
 
@@ -21,6 +24,8 @@ export default function ColumnMapper({ headers, rows, onBack, onClose }) {
   const [preview, setPreview] = useState(null)
   const [bulkUpload, { isLoading }] = useBulkUploadMutation()
   const [result, setResult] = useState(null)
+  const dispatch = useDispatch()
+  const leadsRemaining = useSelector(selectLeadsRemaining)
 
   function buildLeadMapping() {
     const leadMapping = {}
@@ -37,7 +42,12 @@ export default function ColumnMapper({ headers, rows, onBack, onClose }) {
   }
 
   async function handleImport() {
+    if (preview.valid.length > leadsRemaining) {
+      toast.error(`Only ${leadsRemaining} leads left in your quota. Upgrade or import fewer.`)
+      return
+    }
     const data = await bulkUpload(preview.valid).unwrap()
+    dispatch(trackLeads(data.created || preview.valid.length))
     setResult(data)
   }
 
