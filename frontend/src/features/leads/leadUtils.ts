@@ -13,21 +13,48 @@ export interface ParsedFile {
  * formatted that way). We must expand those back to plain digit strings before
  * anything downstream (validation, dedupe, API payload) touches them.
  */
-export function normalizePhoneValue(value: unknown): string {
-  if (value == null) return "";
+export interface NormalizedPhone {
+  phone: string;
+  truncated: boolean; // true when the source cell lost precision (Excel float)
+}
+
+/**
+ * A JS number carries ~15-17 significant digits. Phone numbers stored as
+ * floats in Excel get rounded to the mantissa's precision — e.g. entering
+ * 917464123456 and saving as CSV yields "9.17464E+11" which we can only
+ * reconstruct as 917464000000. We treat any numeric-origin phone whose
+ * significant-digit count is below this threshold as truncated.
+ */
+const MIN_SIGNIFICANT_DIGITS = 10;
+
+function countSignificantDigits(raw: string): number {
+  // Strip sign, decimal point, exponent, leading/trailing zeros of the mantissa.
+  const m = raw.replace(/^-/, "").match(/^(\d+)(?:\.(\d+))?(?:[eE][+-]?\d+)?$/);
+  if (!m) return Infinity;
+  const digits = ((m[1] || "") + (m[2] || "")).replace(/^0+/, "").replace(/0+$/, "");
+  return digits.length || 1;
+}
+
+export function normalizePhoneValue(value: unknown): NormalizedPhone {
+  if (value == null) return { phone: "", truncated: false };
   if (typeof value === "number") {
-    if (!Number.isFinite(value)) return "";
-    // toFixed(0) avoids scientific notation for large integers
-    return value.toFixed(0);
+    if (!Number.isFinite(value)) return { phone: "", truncated: false };
+    const sig = countSignificantDigits(value.toString());
+    return { phone: value.toFixed(0), truncated: sig < MIN_SIGNIFICANT_DIGITS };
   }
   const raw = String(value).trim();
-  if (!raw) return "";
-  // Detect scientific-notation strings like "9.17464E+11" or "9.17464e11"
+  if (!raw) return { phone: "", truncated: false };
+  // Scientific-notation strings like "9.17464E+11"
   if (/^-?\d+(\.\d+)?[eE][+-]?\d+$/.test(raw)) {
     const n = Number(raw);
-    if (Number.isFinite(n)) return n.toFixed(0);
+    if (Number.isFinite(n)) {
+      return {
+        phone: n.toFixed(0),
+        truncated: countSignificantDigits(raw) < MIN_SIGNIFICANT_DIGITS,
+      };
+    }
   }
-  return raw;
+  return { phone: raw, truncated: false };
 }
 
 export function parseFile(file: File): Promise<ParsedFile> {
@@ -132,11 +159,18 @@ export function validateRows(
   const invalid: { row: any; reason: string }[] = [];
 
   for (const row of rows) {
-    const phone = normalizePhoneValue(row[mapping.phone]);
+    const { phone, truncated } = normalizePhoneValue(row[mapping.phone]);
     const digits = phone.replace(/\D/g, "");
 
     if (!phone) {
       invalid.push({ row, reason: "Missing phone number" });
+      continue;
+    }
+    if (truncated) {
+      invalid.push({
+        row,
+        reason: "Phone lost precision in Excel (scientific notation). Format the phone column as Text and re-save.",
+      });
       continue;
     }
     if (digits.length < PHONE_MIN_DIGITS) {
