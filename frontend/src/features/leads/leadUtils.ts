@@ -6,6 +6,30 @@ export interface ParsedFile {
   rows: Record<string, any>[];
 }
 
+/**
+ * Convert any cell value into a phone-safe string. Excel loves to store long
+ * phone numbers as floats, so `sheet_to_json` hands us values like
+ * `9.17464e+11` (either as JS numbers or as strings when the cell was already
+ * formatted that way). We must expand those back to plain digit strings before
+ * anything downstream (validation, dedupe, API payload) touches them.
+ */
+export function normalizePhoneValue(value: unknown): string {
+  if (value == null) return "";
+  if (typeof value === "number") {
+    if (!Number.isFinite(value)) return "";
+    // toFixed(0) avoids scientific notation for large integers
+    return value.toFixed(0);
+  }
+  const raw = String(value).trim();
+  if (!raw) return "";
+  // Detect scientific-notation strings like "9.17464E+11" or "9.17464e11"
+  if (/^-?\d+(\.\d+)?[eE][+-]?\d+$/.test(raw)) {
+    const n = Number(raw);
+    if (Number.isFinite(n)) return n.toFixed(0);
+  }
+  return raw;
+}
+
 export function parseFile(file: File): Promise<ParsedFile> {
   return new Promise((resolve, reject) => {
     const name = file.name.toLowerCase();
@@ -19,9 +43,12 @@ export function parseFile(file: File): Promise<ParsedFile> {
     } else {
       const reader = new FileReader();
       reader.onload = (e) => {
+        // `raw: true` keeps numbers as JS numbers so normalizePhoneValue can
+        // safely re-serialize them (formatted strings from `raw:false` would
+        // preserve Excel's own scientific-notation display like "9.17E+11").
         const wb = XLSX.read(e.target?.result, { type: "array" });
         const ws = wb.Sheets[wb.SheetNames[0]];
-        const data = XLSX.utils.sheet_to_json<Record<string, any>>(ws, { defval: "" });
+        const data = XLSX.utils.sheet_to_json<Record<string, any>>(ws, { defval: "", raw: true });
         const headers = data.length ? Object.keys(data[0]) : [];
         resolve({ headers, rows: data });
       };
@@ -105,7 +132,7 @@ export function validateRows(
   const invalid: { row: any; reason: string }[] = [];
 
   for (const row of rows) {
-    const phone = String(row[mapping.phone] ?? "").trim();
+    const phone = normalizePhoneValue(row[mapping.phone]);
     const digits = phone.replace(/\D/g, "");
 
     if (!phone) {

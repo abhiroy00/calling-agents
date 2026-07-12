@@ -26,31 +26,55 @@ export const Route = createFileRoute("/login")({
 
 function LoginPage() {
   const [form, setForm] = useState({ email: "", password: "" });
-  const [login, { isLoading, error }] = useLoginMutation();
+  const [login, { isLoading, error, reset }] = useLoginMutation();
+  const [localError, setLocalError] = useState<string | null>(null);
   const dispatch = useDispatch();
   const navigate = useNavigate();
   const search = useSearch({ from: "/login" });
   const token = useSelector((s: RootState) => s.auth.token);
 
+  // Single source of truth for post-login redirect (prevents double-navigate race).
   useEffect(() => {
     if (token) navigate({ to: search.redirect ?? "/", replace: true });
   }, [token, search.redirect, navigate]);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
+    setLocalError(null);
+    if (!form.email.trim() || !form.password) {
+      setLocalError("Enter your email and password to continue.");
+      return;
+    }
     try {
-      const data = await login(form).unwrap();
+      const data = await login({ email: form.email.trim(), password: form.password }).unwrap();
+      if (!data?.access) {
+        setLocalError("Login response was missing a session token. Try again.");
+        return;
+      }
       dispatch(setCredentials(data));
-      navigate({ to: search.redirect ?? "/", replace: true });
-    } catch {
-      /* handled via error state */
+      // Effect above handles navigation once the token lands in the store.
+    } catch (err: any) {
+      // Network / CORS errors surface as FETCH_ERROR with no `data`.
+      if (err?.status === "FETCH_ERROR") {
+        setLocalError("Can't reach the server. Check your connection and try again.");
+      }
+      // Anything else falls back to the RTK Query `error` shape below.
     }
   }
 
   const errMsg =
+    localError ||
     (error as any)?.data?.non_field_errors?.[0] ||
     (error as any)?.data?.detail ||
+    (error as any)?.data?.message ||
     (error ? "Login failed — check your credentials" : null);
+
+  function updateField(field: "email" | "password", value: string) {
+    setForm((f) => ({ ...f, [field]: value }));
+    if (localError) setLocalError(null);
+    if (error) reset();
+  }
+
 
   return (
     <div className="grid min-h-screen w-full grid-cols-1 lg:grid-cols-2">
@@ -129,7 +153,7 @@ function LoginPage() {
                   required
                   autoComplete="email"
                   value={form.email}
-                  onChange={(e) => setForm({ ...form, email: e.target.value })}
+                  onChange={(e) => updateField("email", e.target.value)}
                   className="w-full rounded-lg border border-border bg-surface/60 py-2.5 pl-9 pr-3 text-sm text-foreground placeholder:text-muted-foreground focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30"
                   placeholder="you@company.com"
                 />
@@ -146,7 +170,7 @@ function LoginPage() {
                   required
                   autoComplete="current-password"
                   value={form.password}
-                  onChange={(e) => setForm({ ...form, password: e.target.value })}
+                  onChange={(e) => updateField("password", e.target.value)}
                   className="w-full rounded-lg border border-border bg-surface/60 py-2.5 pl-9 pr-3 text-sm text-foreground placeholder:text-muted-foreground focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30"
                   placeholder="••••••••"
                 />

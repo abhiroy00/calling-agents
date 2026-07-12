@@ -15,12 +15,45 @@ export const Route = createFileRoute("/_authenticated/history")({
   component: HistoryPage,
 });
 
+type RangeKey = "today" | "7d" | "30d" | "all";
+type TabKey = "all" | "connected" | "voicemail" | "callback" | "failed";
+
+function rangeStart(range: RangeKey): number | null {
+  if (range === "all") return null;
+  const now = new Date();
+  const start = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  if (range === "today") return start.getTime();
+  if (range === "7d") return start.getTime() - 6 * 86_400_000;
+  if (range === "30d") return start.getTime() - 29 * 86_400_000;
+  return null;
+}
+
+function matchesTab(call: any, tab: TabKey): boolean {
+  if (tab === "all") return true;
+  const status = String(call.status ?? "").toLowerCase();
+  const disp = String(call.disposition ?? "").toLowerCase();
+  if (tab === "connected") return status === "connected" || status === "completed" || disp === "connected";
+  if (tab === "voicemail") return status === "voicemail" || disp === "voicemail";
+  if (tab === "callback") return disp === "callback" || disp === "call_back" || status === "callback";
+  if (tab === "failed") return status === "failed" || status === "no_answer" || disp === "failed";
+  return true;
+}
+
 function HistoryPage() {
   const [page, setPage] = useState(1);
   const [selectedId, setSelectedId] = useState<string | number | null>(null);
-  const [range, setRange] = useState<"today" | "7d" | "30d" | "all">("7d");
+  const [range, setRange] = useState<RangeKey>("7d");
+  const [tab, setTab] = useState<TabKey>("all");
   const { data, isFetching } = useGetCallsQuery({ page });
-  const calls = data?.results || data || [];
+  const allCalls: any[] = data?.results || data || [];
+
+  const startMs = rangeStart(range);
+  const calls = allCalls.filter((c) => {
+    if (!matchesTab(c, tab)) return false;
+    if (startMs == null) return true;
+    const t = c.created_at ? new Date(c.created_at).getTime() : NaN;
+    return Number.isFinite(t) && t >= startMs;
+  });
 
   return (
     <div className="mx-auto max-w-7xl">
@@ -28,8 +61,10 @@ function HistoryPage() {
         eyebrow="Conversations"
         title="Call history"
         subtitle="Every call, every transcript, every disposition — searchable."
+        activeTab={tab}
+        onTabChange={(v) => setTab(v as TabKey)}
         tabs={[
-          { label: "All calls", value: "all", count: calls.length },
+          { label: "All calls", value: "all", count: allCalls.length },
           { label: "Connected", value: "connected" },
           { label: "Voicemail", value: "voicemail" },
           { label: "Callbacks", value: "callback" },
@@ -37,16 +72,13 @@ function HistoryPage() {
         ]}
       />
 
-      <div className="mb-4 flex flex-wrap items-center gap-1.5 rounded-xl border border-border bg-card p-2 shadow-[var(--shadow-card)]">
+      <div className="mb-4 flex flex-wrap items-center gap-1.5 rounded-xl border border-border bg-card p-2 shadow-(--shadow-card)">
         <Chip label="Today" active={range === "today"} onClick={() => setRange("today")} />
         <Chip label="Last 7 days" active={range === "7d"} onClick={() => setRange("7d")} />
         <Chip label="Last 30 days" active={range === "30d"} onClick={() => setRange("30d")} />
         <Chip label="All time" active={range === "all"} onClick={() => setRange("all")} />
-        <span className="mx-1 h-5 w-px bg-border" />
-        <Chip label="Any agent" />
-        <Chip label="Any campaign" />
-        <Chip label="Any outcome" />
       </div>
+
 
       <div className="glass hidden overflow-hidden rounded-xl md:block">
         <table className="w-full text-sm">
