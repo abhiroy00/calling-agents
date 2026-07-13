@@ -35,7 +35,7 @@ function LoginPage() {
 
   // Single source of truth for post-login redirect (prevents double-navigate race).
   useEffect(() => {
-    if (token) navigate({ to: search.redirect ?? "/", replace: true });
+    if (token) navigate({ to: search.redirect ?? "/dashboard", replace: true });
   }, [token, search.redirect, navigate]);
 
   async function handleSubmit(e: React.FormEvent) {
