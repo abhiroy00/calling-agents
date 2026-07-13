@@ -5,7 +5,10 @@ export const Route = createFileRoute("/privacy")({
   head: () => ({
     meta: [
       { title: "Privacy Policy — LeadGen+" },
-      { name: "description", content: "How LeadGen+ handles and protects your data." },
+      {
+        name: "description",
+        content: "How LeadGen+ collects, uses, and protects data on the AI calling platform.",
+      },
       { property: "og:title", content: "Privacy Policy — LeadGen+" },
       { property: "og:url", content: "/privacy" },
     ],
@@ -18,106 +21,78 @@ function PrivacyPage() {
   return (
     <LegalShell title="Privacy Policy" updated="July 12, 2026">
       <p className="rounded-md border border-border bg-muted/40 px-4 py-3 text-sm text-muted-foreground">
-        This page outlines how LeadGen+ collects, uses, and protects your data. For the
-        full data processing agreement, contact{" "}
-        <a className="text-primary" href="mailto:legal@leadgenplus.in">
-          legal@leadgenplus.in
-        </a>
-        .
+        This page is maintained by the LeadGen+ team to describe how we handle data on the
+        platform. It is not a legal certification. For DPAs, subprocessor lists, or region-specific
+        addenda, email <a className="text-primary" href="mailto:privacy@leadgenplus.in">privacy@leadgenplus.in</a>.
       </p>
 
-      <Section title="1. What we collect">
+      <Section title="1. Who we are">
+        LeadGen+ is an AI outbound calling platform. In this policy, &quot;we&quot; refers to the
+        LeadGen+ team, and &quot;you&quot; refers to the customer account holder.
+      </Section>
+
+      <Section title="2. Data we collect">
         <ul className="list-disc space-y-1.5 pl-5">
-          <li>
-            <strong>Account information</strong> — name, email, company name, and billing details
-            you provide at sign-up.
-          </li>
-          <li>
-            <strong>Uploaded contact data</strong> — lead lists (names, phone numbers, company
-            details) that you import for outbound calling.
-          </li>
-          <li>
-            <strong>Call recordings & transcripts</strong> — audio and text of AI-assisted calls
-            placed through the platform.
-          </li>
-          <li>
-            <strong>Usage logs</strong> — call duration, timestamps, campaign IDs, and
-            error/failure metadata necessary for billing and troubleshooting.
-          </li>
+          <li><strong className="text-foreground">Account data:</strong> name, email, workspace, billing details.</li>
+          <li><strong className="text-foreground">Lead data you upload:</strong> contact name, phone number, company, email, and any custom fields you provide.</li>
+          <li><strong className="text-foreground">Call data:</strong> recordings, transcripts, disposition, duration, and outcome tags.</li>
+          <li><strong className="text-foreground">Usage data:</strong> log-in events, feature usage, and error diagnostics to operate and improve the Service.</li>
         </ul>
       </Section>
 
-      <Section title="2. How we use your data">
-        <ul className="list-disc space-y-1.5 pl-5">
-          <li>Deliver the AI calling service you subscribed to.</li>
-          <li>Generate dashboards, analytics, and call-quality reports.</li>
-          <li>Bill you accurately based on minutes consumed and plan tier.</li>
-          <li>Improve AI voice models using de-identified call transcripts (opt-out available in settings).</li>
-          <li>Send transactional emails (invoices, usage alerts, plan renewals).</li>
-        </ul>
+      <Section title="3. How we use data">
+        We use data to provide and secure the Service, place calls on your behalf, generate
+        transcripts and analytics, bill for usage, and support you. We do not sell your data.
       </Section>
 
-      <Section title="3. Data retention">
-        <p>Uploaded leads, recordings, and transcripts are retained for the life of your
-        subscription plus 30 days after cancellation, after which they are permanently
-        deleted. You may request early deletion at any time by contacting support.</p>
+      <Section title="4. Roles">
+        For lead and call data, you are the data controller and we are the processor acting on
+        your instructions. You are responsible for the lawful basis of contacting the individuals
+        you upload.
       </Section>
 
-      <Section title="4. Data sharing">
-        <p>We do not sell your data. We share data only with sub-processors necessary to
-        operate the Service (cloud infrastructure, telephony carriers, AI/LLM providers)
-        and only to the extent required for those purposes. All sub-processors are bound by
-        data processing agreements consistent with this Policy.</p>
+      <Section title="5. Subprocessors">
+        We use vetted infrastructure and voice providers to deliver the Service (cloud hosting,
+        telephony carriers, and speech / language model providers). The current list is available
+        on request at <a className="text-primary" href="mailto:privacy@leadgenplus.in">privacy@leadgenplus.in</a>.
       </Section>
 
-      <Section title="5. Security">
-        <p>Data is encrypted in transit (TLS 1.3) and at rest (AES-256). Access to
-        production systems is restricted to authorized personnel with multi-factor
-        authentication. We conduct regular penetration tests and security audits.</p>
+      <Section title="6. Security">
+        Access to the Service requires authenticated sessions. Data in transit is protected with
+        TLS. Access to production systems is restricted to authorized personnel. Report suspected
+        vulnerabilities to <a className="text-primary" href="mailto:security@leadgenplus.in">security@leadgenplus.in</a>.
       </Section>
 
-      <Section title="6. Your rights">
-        <ul className="list-disc space-y-1.5 pl-5">
-          <li>Export your data at any time from the dashboard.</li>
-          <li>Request correction or deletion of your personal data.</li>
-          <li>Opt out of model-improvement data sharing in workspace settings.</li>
-          <li>Withdraw consent where processing is based on consent.</li>
-        </ul>
+      <Section title="7. Retention & deletion">
+        Recordings and transcripts are retained for the period configured on your plan (default 90
+        days) and deleted afterwards. You may request earlier deletion of specific records from
+        your workspace or by contacting us.
       </Section>
 
-      <Section title="7. Cookies">
-        <p>We use essential session cookies for authentication. We do not use tracking
-        cookies, advertising pixels, or third-party analytics scripts on the product
-        dashboard. The public marketing site may use anonymous analytics (see our{" "}
-        <Link to="/terms" className="text-primary underline-offset-2 hover:underline">
-          Terms of Service
-        </Link>
-        ).</p>
+      <Section title="8. Your rights">
+        Depending on where you or the contacted individuals reside, you or they may have rights
+        to access, correct, delete, or object to processing of personal data. Contact us to
+        exercise these rights and we will respond within the timeframe required by applicable
+        law (including the Digital Personal Data Protection Act, 2023 in India).
       </Section>
 
-      <Section title="8. Changes">
-        <p>We may update this Policy from time to time. Material changes will be communicated
-        by email or in-app notice at least 14 days before they take effect.</p>
+      <Section title="9. Cookies">
+        We use strictly necessary cookies to keep you signed in and a small number of analytics
+        cookies to measure product usage. You can block non-essential cookies in your browser.
       </Section>
 
-      <Section title="9. Contact">
-        <p>
-          Data Protection Officer:{" "}
-          <a className="text-primary" href="mailto:dpo@leadgenplus.in">
-            dpo@leadgenplus.in
-          </a>
-          . For general privacy questions:{" "}
-          <a className="text-primary" href="mailto:legal@leadgenplus.in">
-            legal@leadgenplus.in
-          </a>
-          .
-        </p>
+      <Section title="10. Changes">
+        We will post updates to this policy on this page and, for material changes, notify you by
+        email or in-app notice.
+      </Section>
+
+      <Section title="11. Contact">
+        Privacy questions: <a className="text-primary" href="mailto:privacy@leadgenplus.in">privacy@leadgenplus.in</a>.
       </Section>
     </LegalShell>
   );
 }
 
-// Shared layout & Section are colocated to avoid an extra file.
 function LegalShell({
   title,
   updated,

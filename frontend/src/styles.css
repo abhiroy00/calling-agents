@@ -90,7 +90,7 @@
 :root {
   --radius: 0.625rem;
 
-  /* Light — Apollo.io inspired: violet primary on white, light sidebar */
+  /* Light — LeadGen+ palette: violet primary on white, light sidebar */
   --background: oklch(1 0 0);
   --foreground: oklch(0.18 0.03 265);            /* deep navy ink */
   --surface: oklch(0.985 0.004 270);             /* subtle app canvas */
@@ -100,7 +100,7 @@
   --popover: oklch(1 0 0);
   --popover-foreground: oklch(0.18 0.03 265);
 
-  --primary: oklch(0.56 0.24 285);               /* Apollo violet ~#6C47FF */
+  --primary: oklch(0.56 0.24 285);               /* LeadGen+ violet ~#6C47FF */
   --primary-foreground: oklch(1 0 0);
   --primary-glow: oklch(0.7 0.19 295);
 
@@ -130,7 +130,7 @@
   --chart-4: oklch(0.62 0.19 320);
   --chart-5: oklch(0.62 0.14 205);
 
-  /* Apollo-style light sidebar: near-white with violet active state */
+  /* LeadGen+ light sidebar: near-white with violet active state */
   --sidebar: oklch(0.995 0.002 270);
   --sidebar-foreground: oklch(0.32 0.03 265);
   --sidebar-primary: oklch(0.56 0.24 285);

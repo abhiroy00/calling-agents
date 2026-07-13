@@ -1,4 +1,4 @@
-import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
+import { createFileRoute, Link, useNavigate, useRouterState } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { useSelector } from "react-redux";
 import { toast } from "sonner";
@@ -7,17 +7,26 @@ import {
   PhoneCall,
   BarChart3,
   Radio,
-  Sparkles,
   Check,
   ArrowRight,
   Zap,
   ShieldCheck,
   Users,
-  Bolt,
-  Waves,
   Play,
   Star,
+  Sparkles,
+  Waves,
+  Menu,
+  X,
 } from "lucide-react";
+import {
+  Sheet,
+  SheetContent,
+  SheetHeader,
+  SheetTitle,
+  SheetTrigger,
+} from "@/components/ui/sheet";
+
 import type { RootState } from "@/app/store";
 
 export const Route = createFileRoute("/")({
@@ -109,11 +118,10 @@ function LandingPage() {
   }, [token, navigate]);
 
   if (token) {
-    // Prevent flash of landing content while the redirect resolves.
     return (
-      <div className="grid min-h-screen place-items-center bg-[#08070f] text-white/70">
+      <div className="grid min-h-screen place-items-center bg-background text-muted-foreground">
         <div className="flex items-center gap-2 text-sm">
-          <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-[#7c5cff]" />
+          <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-primary" />
           Loading your workspace…
         </div>
       </div>
@@ -121,7 +129,7 @@ function LandingPage() {
   }
 
   return (
-    <div className="min-h-screen bg-[#08070f] text-white antialiased selection:bg-[#7c5cff]/40">
+    <div className="relative min-h-screen bg-background text-foreground antialiased">
       <BackgroundFX />
       <div className="relative z-10">
         <Header />
@@ -144,88 +152,344 @@ function BackgroundFX() {
   return (
     <div aria-hidden className="pointer-events-none fixed inset-0 z-0 overflow-hidden">
       <div
-        className="absolute inset-0 opacity-[0.35]"
+        className="absolute inset-0"
         style={{
           backgroundImage:
-            "linear-gradient(rgba(124,92,255,0.10) 1px, transparent 1px), linear-gradient(90deg, rgba(124,92,255,0.10) 1px, transparent 1px)",
-          backgroundSize: "48px 48px",
+            "linear-gradient(color-mix(in oklab, var(--color-primary) 7%, transparent) 1px, transparent 1px), linear-gradient(90deg, color-mix(in oklab, var(--color-primary) 7%, transparent) 1px, transparent 1px)",
+          backgroundSize: "56px 56px",
           maskImage:
-            "radial-gradient(ellipse 90% 60% at 50% 0%, black 40%, transparent 80%)",
+            "radial-gradient(ellipse 80% 55% at 50% 0%, black 30%, transparent 75%)",
         }}
       />
-      <div className="absolute -top-40 left-1/2 h-[36rem] w-[36rem] -translate-x-1/2 rounded-full bg-[#7c5cff] opacity-30 blur-[140px]" />
-      <div className="absolute top-1/3 -right-40 h-[28rem] w-[28rem] rounded-full bg-[#ff3d81] opacity-20 blur-[140px]" />
-      <div className="absolute bottom-0 -left-40 h-[28rem] w-[28rem] rounded-full bg-[#22d3ee] opacity-15 blur-[140px]" />
       <div
-        className="absolute inset-0 opacity-[0.08] mix-blend-overlay"
-        style={{
-          backgroundImage:
-            "url(\"data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='120' height='120'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/></filter><rect width='100%' height='100%' filter='url(%23n)' opacity='0.6'/></svg>\")",
-        }}
+        className="absolute -top-40 left-1/2 h-[40rem] w-[40rem] -translate-x-1/2 rounded-full opacity-[0.35] blur-[140px]"
+        style={{ background: "color-mix(in oklab, var(--color-primary) 60%, transparent)" }}
+      />
+      <div
+        className="absolute top-1/3 -right-40 h-[26rem] w-[26rem] rounded-full opacity-[0.22] blur-[140px]"
+        style={{ background: "color-mix(in oklab, var(--color-primary-glow) 70%, transparent)" }}
       />
     </div>
   );
 }
 
-/* ---------- header ---------- */
+/* ---------- floating pill header ---------- */
+function useReducedMotion() {
+  const [reduced, setReduced] = useState(false);
+  useEffect(() => {
+    if (typeof window === "undefined" || !window.matchMedia) return;
+    const mq = window.matchMedia("(prefers-reduced-motion: reduce)");
+    const update = () => setReduced(mq.matches);
+    update();
+    mq.addEventListener?.("change", update);
+    return () => mq.removeEventListener?.("change", update);
+  }, []);
+  return reduced;
+}
+
 function Header() {
+  const reduceMotion = useReducedMotion();
+  const [scrolledRaw, setScrolled] = useState(false);
+  const [menuOpen, setMenuOpen] = useState(false);
+  useEffect(() => {
+    const onScroll = () => setScrolled(window.scrollY > 12);
+    onScroll();
+    window.addEventListener("scroll", onScroll, { passive: true });
+    return () => window.removeEventListener("scroll", onScroll);
+  }, []);
+  // Radix Dialog (used by Sheet) handles body-scroll lock, focus trap, and
+  // Escape-to-close on its own. We only need to force-close the sheet on route
+  // changes so the panel doesn't linger across navigations.
+  const pathname = useRouterState({ select: (s) => s.location.pathname });
+  useEffect(() => {
+    setMenuOpen(false);
+  }, [pathname]);
+
+
+  // When reduced motion is preferred, freeze the pill in its resting (unscrolled)
+  // size so it never shrinks/animates on scroll. Only the background/shadow tokens
+  // (see below) still swap, and even those transition instantly.
+  const scrolled = reduceMotion ? false : scrolledRaw;
+  const solid = scrolledRaw; // for opaque bg/shadow after scroll, no size change
+
+  const navLinks: Array<[string, string]> = [
+    ["Features", "#features"],
+    ["Pricing", "#pricing"],
+    ["Live agents", "#showcase"],
+    ["Demo", "#demo"],
+  ];
+
+  const ease = "cubic-bezier(0.22, 1, 0.36, 1)";
+  const t = (props: string) =>
+    reduceMotion
+      ? { transitionProperty: "none", transitionDuration: "0ms" }
+      : {
+          transitionProperty: props,
+          transitionDuration: "450ms",
+          transitionTimingFunction: ease,
+        };
+
   return (
-    <header className="sticky top-0 z-40 border-b border-white/5 bg-[#08070f]/70 backdrop-blur-xl">
-      <div className="mx-auto flex max-w-7xl items-center justify-between px-4 py-3.5 sm:px-6">
-        <Link to="/" className="flex items-center gap-2.5">
-          <div className="relative grid h-9 w-9 place-items-center rounded-xl bg-gradient-to-br from-[#7c5cff] to-[#ff3d81] shadow-[0_0_30px_-6px_rgba(124,92,255,0.7)]">
-            <Rocket className="h-4 w-4" strokeWidth={2.4} />
-            <span className="absolute inset-0 rounded-xl ring-1 ring-inset ring-white/20" />
+    <div
+      className="pointer-events-none fixed inset-x-0 top-0 z-50 flex justify-center px-3"
+      style={{
+        paddingTop: scrolled ? "0.5rem" : "1.25rem",
+        ...t("padding-top"),
+      }}
+    >
+      <header
+        className="group/nav pointer-events-auto relative flex w-full items-center justify-between rounded-full border backdrop-blur-xl will-change-transform"
+        style={{
+          maxWidth: scrolled ? "56rem" : "72rem",
+          paddingInline: scrolled ? "0.5rem" : "0.625rem",
+          paddingBlock: scrolled ? "0.375rem" : "0.5rem",
+          gap: scrolled ? "0.5rem" : "0.75rem",
+          borderColor: solid
+            ? "color-mix(in oklab, var(--color-border) 80%, transparent)"
+            : "color-mix(in oklab, var(--color-border) 50%, transparent)",
+          background: solid
+            ? "color-mix(in oklab, var(--color-background) 82%, transparent)"
+            : "color-mix(in oklab, var(--color-background) 60%, transparent)",
+          boxShadow: solid
+            ? "0 10px 34px -14px color-mix(in oklab, var(--color-primary) 28%, transparent), 0 1px 0 0 color-mix(in oklab, var(--color-foreground) 4%, transparent) inset"
+            : "0 0 0 0 transparent",
+          transform: scrolled ? "translateY(0) scale(0.985)" : "translateY(0) scale(1)",
+          ...t("max-width, padding, gap, border-color, background, box-shadow, transform"),
+        }}
+      >
+        {/* Backlit glow on hover */}
+        <span
+          aria-hidden
+          className="pointer-events-none absolute -inset-px rounded-full opacity-0 blur-xl transition-opacity duration-500 group-hover/nav:opacity-100"
+          style={{
+            background:
+              "radial-gradient(60% 120% at 50% 0%, color-mix(in oklab, var(--color-primary) 22%, transparent), transparent 70%)",
+          }}
+        />
+        <Link to="/" className="relative flex items-center pl-1.5">
+          <div
+            className="relative grid place-items-center rounded-xl text-primary-foreground"
+            style={{
+              height: scrolled ? "1.75rem" : "2rem",
+              width: scrolled ? "1.75rem" : "2rem",
+              background: "var(--gradient-primary)",
+              boxShadow: scrolled
+                ? "0 4px 14px -4px color-mix(in oklab, var(--color-primary) 55%, transparent)"
+                : "0 6px 20px -6px color-mix(in oklab, var(--color-primary) 60%, transparent)",
+              ...t("height, width, box-shadow"),
+            }}
+          >
+            <Rocket
+              strokeWidth={2.4}
+              style={{
+                height: scrolled ? "0.85rem" : "1rem",
+                width: scrolled ? "0.85rem" : "1rem",
+                ...t("height, width"),
+              }}
+            />
+            <span className="absolute inset-0 rounded-xl ring-1 ring-inset ring-white/25" />
           </div>
-          <span className="text-[15px] font-semibold tracking-tight">
-            LeadGen<span className="text-transparent bg-clip-text bg-gradient-to-r from-[#a78bfa] to-[#ff3d81]">+</span>
+          <span
+            className="font-semibold tracking-tight"
+            style={{
+              marginLeft: scrolled ? "0.5rem" : "0.625rem",
+              fontSize: scrolled ? "13.5px" : "15px",
+              ...t("margin-left, font-size"),
+            }}
+          >
+            LeadGen<span className="gradient-text">+</span>
           </span>
         </Link>
-        <nav className="hidden items-center gap-7 text-sm text-white/60 md:flex">
-          <a href="#features" className="transition-colors hover:text-white">Features</a>
-          <a href="#pricing" className="transition-colors hover:text-white">Pricing</a>
-          <a href="#showcase" className="transition-colors hover:text-white">Live agents</a>
-          <a href="#demo" className="transition-colors hover:text-white">Book a demo</a>
+        <nav
+          className="relative hidden items-center rounded-full border border-border/40 bg-accent/40 text-sm lg:flex"
+          style={{
+            gap: "0.125rem",
+            padding: "0.25rem",
+            ...t("gap, padding"),
+          }}
+        >
+          {navLinks.map(([label, href]) => {
+            const isLive = label === "Live agents";
+            return (
+              <a
+                key={href}
+                href={href}
+                className="inline-flex items-center gap-1.5 rounded-full font-medium text-muted-foreground hover:bg-background hover:text-foreground hover:shadow-[0_1px_0_0_color-mix(in_oklab,var(--color-foreground)_6%,transparent)_inset]"
+                style={{
+                  paddingInline: scrolled ? "0.75rem" : "0.875rem",
+                  paddingBlock: scrolled ? "0.3rem" : "0.375rem",
+                  fontSize: scrolled ? "13px" : "14px",
+                  ...t("padding, font-size, background-color, color, box-shadow"),
+                }}
+              >
+                {label}
+                {isLive && (
+                  <span className="relative ml-0.5 flex h-2 w-2" aria-hidden>
+                    {!reduceMotion && (
+                      <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-75" />
+                    )}
+                    <span className="relative inline-flex h-2 w-2 rounded-full bg-emerald-500 ring-2 ring-emerald-500/20" />
+                  </span>
+                )}
+              </a>
+            );
+          })}
         </nav>
-        <div className="flex items-center gap-2">
+
+        <div
+          className="relative hidden items-center lg:flex"
+          style={{ gap: scrolled ? "0.25rem" : "0.375rem", ...t("gap") }}
+        >
           <Link
             to="/login"
-            className="rounded-lg px-3 py-1.5 text-sm font-medium text-white/80 transition-colors hover:bg-white/5 hover:text-white"
+            className="rounded-full font-medium text-muted-foreground hover:bg-accent hover:text-foreground"
+            style={{
+              paddingInline: scrolled ? "0.75rem" : "0.875rem",
+              paddingBlock: scrolled ? "0.3rem" : "0.375rem",
+              fontSize: scrolled ? "13px" : "14px",
+              ...t("padding, font-size, background-color, color"),
+            }}
           >
             Sign in
           </Link>
           <a
             href="#demo"
-            className="group hidden items-center gap-1.5 rounded-lg bg-gradient-to-r from-[#7c5cff] to-[#ff3d81] px-3.5 py-1.5 text-sm font-semibold text-white shadow-[0_0_24px_-8px_rgba(124,92,255,0.9)] transition-transform hover:-translate-y-px sm:inline-flex"
+            className="group relative inline-flex items-center gap-1.5 rounded-full font-semibold text-primary-foreground transition-transform hover:-translate-y-px active:translate-y-0 active:scale-[0.98]"
+            style={{
+              background: "var(--gradient-primary)",
+              paddingInline: scrolled ? "0.875rem" : "1.05rem",
+              paddingBlock: scrolled ? "0.375rem" : "0.5rem",
+              fontSize: scrolled ? "13px" : "14px",
+              boxShadow: scrolled
+                ? "0 6px 18px -6px color-mix(in oklab, var(--color-primary) 75%, transparent), 0 0 0 1px color-mix(in oklab, var(--color-primary) 25%, transparent) inset"
+                : "0 10px 28px -10px color-mix(in oklab, var(--color-primary) 85%, transparent), 0 0 0 1px color-mix(in oklab, var(--color-primary) 25%, transparent) inset",
+              ...t("padding, font-size, box-shadow, transform"),
+            }}
           >
-            Book a demo
-            <ArrowRight className="h-3.5 w-3.5 transition-transform group-hover:translate-x-0.5" />
+            <span
+              aria-hidden
+              className="pointer-events-none absolute inset-0 rounded-full opacity-0 transition-opacity duration-300 group-hover:opacity-100"
+              style={{
+                background:
+                  "linear-gradient(180deg, color-mix(in oklab, white 22%, transparent), transparent 55%)",
+              }}
+            />
+            <span className="relative">Book demo</span>
+            <ArrowRight className="relative h-3.5 w-3.5 transition-transform group-hover:translate-x-0.5" />
           </a>
         </div>
-      </div>
-    </header>
+
+        {/* Mobile hamburger — opens side sheet */}
+        <Sheet open={menuOpen} onOpenChange={setMenuOpen}>
+          <SheetTrigger asChild>
+            <button
+              type="button"
+              aria-label={menuOpen ? "Close menu" : "Open menu"}
+              aria-expanded={menuOpen}
+              className="grid h-9 w-9 shrink-0 place-items-center rounded-full border border-border bg-background/70 text-foreground transition-colors hover:bg-accent lg:hidden"
+            >
+              {menuOpen ? <X className="h-4 w-4" /> : <Menu className="h-4 w-4" />}
+            </button>
+          </SheetTrigger>
+          <SheetContent
+            side="right"
+            className="flex w-[86%] max-w-sm flex-col gap-0 border-l border-border bg-background p-0"
+          >
+            <SheetHeader className="border-b border-border p-5 text-left">
+              <SheetTitle asChild>
+                <Link
+                  to="/"
+                  onClick={() => setMenuOpen(false)}
+                  className="flex items-center gap-2.5"
+                >
+                  <span
+                    className="relative grid h-8 w-8 place-items-center rounded-xl text-primary-foreground"
+                    style={{
+                      background: "var(--gradient-primary)",
+                      boxShadow:
+                        "0 6px 20px -6px color-mix(in oklab, var(--color-primary) 60%, transparent)",
+                    }}
+                  >
+                    <Rocket className="h-4 w-4" strokeWidth={2.4} />
+                    <span className="absolute inset-0 rounded-xl ring-1 ring-inset ring-white/25" />
+                  </span>
+                  <span className="text-[15px] font-semibold tracking-tight">
+                    LeadGen<span className="gradient-text">+</span>
+                  </span>
+                </Link>
+              </SheetTitle>
+            </SheetHeader>
+
+            <nav className="flex-1 space-y-1 overflow-y-auto p-4">
+              {navLinks.map(([label, href]) => {
+                const isLive = label === "Live agents";
+                return (
+                  <a
+                    key={href}
+                    href={href}
+                    onClick={() => setMenuOpen(false)}
+                    className="group flex items-center justify-between rounded-xl px-3 py-3 text-[15px] font-medium text-foreground transition-colors hover:bg-accent"
+                  >
+                    <span className="inline-flex items-center gap-2">
+                      {label}
+                      {isLive && (
+                        <span className="relative flex h-2 w-2" aria-hidden>
+                          {!reduceMotion && (
+                            <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-75" />
+                          )}
+                          <span className="relative inline-flex h-2 w-2 rounded-full bg-emerald-500 ring-2 ring-emerald-500/20" />
+                        </span>
+                      )}
+                    </span>
+                    <ArrowRight className="h-4 w-4 text-muted-foreground transition-transform group-hover:translate-x-0.5" />
+                  </a>
+                );
+              })}
+            </nav>
+
+            <div className="flex flex-col gap-2 border-t border-border p-4">
+              <Link
+                to="/login"
+                onClick={() => setMenuOpen(false)}
+                className="rounded-full border border-border bg-background px-4 py-2.5 text-center text-sm font-semibold text-foreground transition-colors hover:bg-accent"
+              >
+                Sign in
+              </Link>
+              <a
+                href="#demo"
+                onClick={() => setMenuOpen(false)}
+                className="inline-flex items-center justify-center gap-1.5 rounded-full px-4 py-2.5 text-sm font-semibold text-primary-foreground shadow-[0_10px_24px_-10px_color-mix(in_oklab,var(--color-primary)_80%,transparent)]"
+                style={{ background: "var(--gradient-primary)" }}
+              >
+                Book demo
+                <ArrowRight className="h-4 w-4" />
+              </a>
+            </div>
+          </SheetContent>
+        </Sheet>
+      </header>
+    </div>
+
   );
 }
 
 /* ---------- hero ---------- */
 function Hero() {
   return (
-    <section className="relative">
-      <div className="mx-auto max-w-7xl px-4 py-24 sm:px-6 lg:py-32">
+    <section className="relative pt-28 sm:pt-36">
+      <div className="mx-auto max-w-7xl px-4 py-16 sm:px-6 lg:py-24">
         <div className="mx-auto max-w-4xl text-center">
-          <span className="inline-flex items-center gap-1.5 rounded-full border border-white/10 bg-white/5 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.2em] text-white/70 backdrop-blur">
-            <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-[#7c5cff]" />
-            Live · Hindi + English voice agents
+          <span className="inline-flex items-center gap-2 rounded-full border border-border bg-card/70 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-foreground backdrop-blur sm:px-3 sm:text-[11px] sm:tracking-[0.18em]">
+            <span className="pulse-dot h-1.5 w-1.5 rounded-full bg-primary" />
+            New · Hindi + English voice agents
           </span>
-          <h1 className="mt-6 text-5xl font-bold leading-[1.02] tracking-[-0.03em] sm:text-6xl lg:text-[88px]">
+          <h1 className="mt-5 text-[36px] font-bold leading-[1.05] tracking-[-0.03em] sm:mt-6 sm:text-6xl sm:leading-[1.02] lg:text-[84px]">
             Outbound sales,
             <br />
             <span className="relative inline-block">
-              <span className="bg-gradient-to-r from-[#a78bfa] via-[#ff3d81] to-[#f59e0b] bg-clip-text text-transparent">
-                on autopilot.
-              </span>
+              <span className="gradient-text">on autopilot.</span>
               <svg
-                className="absolute -bottom-2 left-0 h-3 w-full text-[#ff3d81]/70"
+                className="absolute -bottom-2 left-0 h-3 w-full text-primary/70"
                 viewBox="0 0 300 12"
                 preserveAspectRatio="none"
                 fill="none"
@@ -239,14 +503,15 @@ function Hero() {
               </svg>
             </span>
           </h1>
-          <p className="mx-auto mt-7 max-w-2xl text-lg text-white/60 sm:text-xl">
+          <p className="mx-auto mt-5 max-w-2xl text-[15px] leading-relaxed text-muted-foreground sm:mt-7 sm:text-xl sm:leading-normal">
             The AI SDR that dials 10,000 leads before your reps finish their chai.
-            Books meetings 24×7 at <span className="text-white">₹2/minute</span>. Built for Indian SMBs.
+            Books meetings 24×7 at <span className="font-semibold text-foreground">₹2/minute</span>. Built for Indian SMBs.
           </p>
           <div className="mt-10 flex flex-wrap items-center justify-center gap-3">
             <a
               href="#demo"
-              className="group relative inline-flex items-center gap-2 overflow-hidden rounded-xl bg-gradient-to-r from-[#7c5cff] to-[#ff3d81] px-6 py-3 text-sm font-semibold text-white shadow-[0_0_40px_-8px_rgba(124,92,255,0.9)] transition-transform hover:-translate-y-0.5"
+              className="group relative inline-flex items-center gap-2 overflow-hidden rounded-xl px-6 py-3 text-sm font-semibold text-primary-foreground shadow-[0_10px_40px_-10px_color-mix(in_oklab,var(--color-primary)_80%,transparent)] transition-transform hover:-translate-y-0.5"
+              style={{ background: "var(--gradient-primary)" }}
             >
               <span className="relative z-10 flex items-center gap-2">
                 Start dialing free
@@ -256,97 +521,212 @@ function Hero() {
             </a>
             <a
               href="#showcase"
-              className="inline-flex items-center gap-2 rounded-xl border border-white/15 bg-white/[0.03] px-6 py-3 text-sm font-semibold text-white backdrop-blur transition-colors hover:bg-white/[0.08]"
+              className="inline-flex items-center gap-2 rounded-xl border border-border bg-card px-6 py-3 text-sm font-semibold text-foreground transition-colors hover:bg-accent"
             >
-              <Play className="h-4 w-4 fill-current" />
+              <Play className="h-4 w-4 fill-current text-primary" />
               Hear a live call
             </a>
           </div>
-          <div className="mt-6 flex flex-wrap items-center justify-center gap-x-6 gap-y-2 text-[11px] uppercase tracking-widest text-white/40">
-            <span className="flex items-center gap-1.5"><Check className="h-3 w-3 text-[#7c5cff]" /> 100 free minutes</span>
-            <span className="flex items-center gap-1.5"><Check className="h-3 w-3 text-[#7c5cff]" /> No credit card</span>
-            <span className="flex items-center gap-1.5"><Check className="h-3 w-3 text-[#7c5cff]" /> Setup in 4 minutes</span>
+          <div className="mt-6 flex flex-wrap items-center justify-center gap-x-6 gap-y-2 text-[11px] uppercase tracking-widest text-muted-foreground">
+            <span className="flex items-center gap-1.5"><Check className="h-3 w-3 text-primary" /> 100 free minutes</span>
+            <span className="flex items-center gap-1.5"><Check className="h-3 w-3 text-primary" /> No credit card</span>
+            <span className="flex items-center gap-1.5"><Check className="h-3 w-3 text-primary" /> Setup in 4 min</span>
           </div>
         </div>
 
-        {/* Console preview */}
-        <div className="relative mx-auto mt-20 max-w-5xl">
-          <div className="absolute -inset-x-10 -top-8 bottom-0 rounded-[2rem] bg-gradient-to-b from-[#7c5cff]/30 via-transparent to-transparent blur-2xl" />
-          <div className="relative overflow-hidden rounded-2xl border border-white/10 bg-gradient-to-b from-white/[0.08] to-white/[0.02] p-1 shadow-2xl backdrop-blur">
-            <div className="flex items-center gap-1.5 border-b border-white/5 px-4 py-2.5">
-              <span className="h-2.5 w-2.5 rounded-full bg-[#ff5f57]" />
-              <span className="h-2.5 w-2.5 rounded-full bg-[#febc2e]" />
-              <span className="h-2.5 w-2.5 rounded-full bg-[#28c840]" />
-              <span className="ml-3 text-[11px] font-medium text-white/40">leadgen.plus / live</span>
-              <span className="ml-auto flex items-center gap-1.5 rounded-full border border-emerald-400/30 bg-emerald-400/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-emerald-300">
-                <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-emerald-400" /> Live · 47 calls
+        {/* Console preview — glassmorphic layered dashboard */}
+        <ConsoleShowcase />
+      </div>
+    </section>
+  );
+}
+
+/* ---------- console showcase (bento glass) ---------- */
+function ConsoleShowcase() {
+  const queue = [
+    { name: "Rahul Sharma", role: "Whitefield 3BHK lead", initials: "RS", state: "Calling now…", live: true },
+    { name: "Priya Patel", role: "Term life · Ahmedabad", initials: "PP", state: "In 40 seconds" },
+    { name: "Arjun Mehta", role: "EdTech demo · Bengaluru", initials: "AM", state: "In 2 minutes" },
+    { name: "Kavya Reddy", role: "IELTS coaching · Hyd", initials: "KR", state: "In 4 minutes" },
+  ];
+  return (
+    <div className="relative mx-auto mt-20 max-w-6xl">
+      {/* soft glow behind the frame */}
+      <div
+        className="absolute -inset-4 rounded-[2.5rem] opacity-40 blur-3xl"
+        style={{ background: "var(--gradient-primary)" }}
+      />
+      <div className="relative flex flex-col overflow-hidden rounded-[1.75rem] border border-border bg-card shadow-elevated md:h-[520px] md:flex-row">
+        {/* Sidebar — active queue */}
+        <aside className="flex w-full flex-col border-b border-border bg-surface/60 md:w-64 md:border-b-0 md:border-r lg:w-72">
+          <div className="border-b border-border p-4 sm:p-5">
+            <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-muted-foreground">Active queue</p>
+            <p className="mt-1 text-sm font-semibold text-foreground">12 contacts remaining today</p>
+          </div>
+          <div className="space-y-2 p-4 md:flex-1 md:overflow-hidden">
+
+            {queue.map((q) => (
+              <div
+                key={q.name}
+                className={
+                  "flex items-center gap-3 rounded-xl border p-3 transition-colors " +
+                  (q.live
+                    ? "border-primary/30 bg-card shadow-[0_6px_20px_-12px_color-mix(in_oklab,var(--color-primary)_60%,transparent)]"
+                    : "border-transparent bg-muted/40 opacity-70")
+                }
+              >
+                <div
+                  className={
+                    "grid h-9 w-9 shrink-0 place-items-center rounded-full text-[11px] font-bold " +
+                    (q.live ? "bg-primary/15 text-primary" : "bg-muted text-muted-foreground")
+                  }
+                >
+                  {q.initials}
+                </div>
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-[12.5px] font-semibold text-foreground">{q.name}</p>
+                  <p className="truncate text-[10.5px] text-muted-foreground">{q.role}</p>
+                </div>
+                <span
+                  className={
+                    "shrink-0 text-[10px] font-semibold " +
+                    (q.live ? "text-success" : "text-muted-foreground")
+                  }
+                >
+                  {q.live ? (
+                    <span className="flex items-center gap-1">
+                      <span className="pulse-dot h-1.5 w-1.5 rounded-full bg-success" />
+                      LIVE
+                    </span>
+                  ) : (
+                    q.state
+                  )}
+                </span>
+              </div>
+            ))}
+          </div>
+          <div className="border-t border-border p-4">
+            <div className="rounded-xl border border-border bg-card p-3">
+              <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-muted-foreground">Campaign ROI</p>
+              <p className="tabular gradient-text mt-1 text-2xl font-bold leading-none">12.4×</p>
+              <p className="mt-1 text-[10px] font-semibold text-success">+2.4% vs last week</p>
+            </div>
+          </div>
+        </aside>
+
+        {/* Main — live transcript */}
+        <div className="relative flex min-w-0 flex-1 flex-col bg-background">
+          <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2 border-b border-border px-4 py-3 sm:px-5">
+            <div className="flex min-w-0 items-center gap-2.5">
+              <span className="pulse-dot h-2 w-2 shrink-0 rounded-full bg-destructive" />
+              <span className="truncate text-sm font-semibold text-foreground">
+                Live transcript · Rahul Sharma
               </span>
             </div>
-            <div className="grid gap-px bg-white/5 sm:grid-cols-[1fr_1.4fr]">
-              <div className="space-y-2 bg-[#0d0b18] p-5">
-                {[
-                  { name: "Rahul Sharma", city: "Mumbai · Real estate", status: "Talking", pulse: true },
-                  { name: "Priya Patel", city: "Ahmedabad · Insurance", status: "Booked ✓", ok: true },
-                  { name: "Arjun Mehta", city: "Bengaluru · EdTech", status: "Voicemail" },
-                  { name: "Kavya Reddy", city: "Hyderabad · Coaching", status: "Ringing…" },
-                  { name: "Vikram Singh", city: "Delhi · Real estate", status: "Booked ✓", ok: true },
-                ].map((row) => (
-                  <div
-                    key={row.name}
-                    className="flex items-center justify-between rounded-lg border border-white/5 bg-white/[0.02] px-3 py-2.5 text-[13px]"
-                  >
-                    <div className="min-w-0">
-                      <p className="truncate font-medium text-white">{row.name}</p>
-                      <p className="truncate text-[11px] text-white/40">{row.city}</p>
-                    </div>
-                    <span
-                      className={
-                        "shrink-0 rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider " +
-                        (row.ok
-                          ? "bg-emerald-400/15 text-emerald-300"
-                          : row.pulse
-                            ? "bg-[#7c5cff]/20 text-[#c4b5fd]"
-                            : "bg-white/5 text-white/50")
-                      }
-                    >
-                      {row.status}
-                    </span>
-                  </div>
-                ))}
-              </div>
-              <div className="relative bg-[#0a0813] p-5">
-                <div className="mb-3 flex items-center gap-2 text-[11px] uppercase tracking-widest text-white/40">
-                  <Waves className="h-3.5 w-3.5 text-[#7c5cff]" /> Transcript · Rahul Sharma
-                </div>
-                <div className="space-y-3 text-[13px]">
-                  <div className="flex gap-2">
-                    <span className="shrink-0 rounded-md bg-[#7c5cff]/20 px-1.5 py-0.5 text-[10px] font-bold text-[#c4b5fd]">AI</span>
-                    <p className="text-white/80">Hi Rahul, this is Ananya from Prestige Realty. You inquired about the Whitefield 3BHK — is now a good time?</p>
-                  </div>
-                  <div className="flex gap-2">
-                    <span className="shrink-0 rounded-md bg-white/10 px-1.5 py-0.5 text-[10px] font-bold text-white/70">You</span>
-                    <p className="text-white/70">Haan, batao. Kya price hai?</p>
-                  </div>
-                  <div className="flex gap-2">
-                    <span className="shrink-0 rounded-md bg-[#7c5cff]/20 px-1.5 py-0.5 text-[10px] font-bold text-[#c4b5fd]">AI</span>
-                    <p className="text-white/80">Starting at ₹1.4Cr, possession Dec 2026. Would Saturday 11am work for a site visit?</p>
-                  </div>
-                </div>
-                <div className="mt-5 flex items-end gap-0.5">
-                  {[16, 28, 40, 22, 34, 46, 30, 24, 38, 52, 28, 18, 32, 44, 26, 20, 36].map((h, i) => (
-                    <span
-                      key={i}
-                      className="w-1 rounded-sm bg-gradient-to-t from-[#7c5cff] to-[#ff3d81]"
-                      style={{ height: `${h}px`, opacity: 0.35 + (i % 4) * 0.15 }}
-                    />
-                  ))}
-                </div>
-              </div>
+            <div className="flex flex-wrap gap-1.5">
+              <span className="rounded-md bg-success/10 px-2 py-0.5 text-[10px] font-semibold text-success">
+                Sentiment · Positive
+              </span>
+              <span className="hidden rounded-md bg-primary/10 px-2 py-0.5 text-[10px] font-semibold text-primary sm:inline-block">
+                Agent · Ananya v2
+              </span>
             </div>
+          </div>
+
+
+          <div
+            className="relative space-y-4 overflow-hidden p-4 sm:p-6 md:flex-1"
+            style={{
+              backgroundImage:
+                "radial-gradient(color-mix(in oklab, var(--color-primary) 12%, transparent) 1px, transparent 1px)",
+              backgroundSize: "22px 22px",
+            }}
+          >
+            <TranscriptBubble who="AI" text="Hi Rahul, this is Ananya from Prestige Realty. You inquired about the Whitefield 3BHK — is now a good time to chat?" />
+            <TranscriptBubble who="You" text="Haan, batao. Kya price hai?" mirror />
+            <TranscriptBubble who="AI" text="Starting at ₹1.4Cr, possession Dec 2026. Would Saturday 11am work for a site visit?" />
+
+            {/* waveform */}
+            <div className="flex items-end justify-center gap-1 pt-6">
+              {[10, 18, 26, 14, 30, 22, 36, 20, 28, 16, 24, 32, 14, 22].map((h, i) => (
+                <span
+                  key={i}
+                  className="w-1 rounded-full"
+                  style={{
+                    height: `${h}px`,
+                    background: "var(--gradient-primary)",
+                    opacity: 0.4 + (i % 4) * 0.15,
+                    animation: `wf 1.4s ${i * 80}ms ease-in-out infinite`,
+                  }}
+                />
+              ))}
+            </div>
+            <style>{`@keyframes wf { 0%,100% { transform: scaleY(0.6);} 50% { transform: scaleY(1.35);} }`}</style>
           </div>
         </div>
       </div>
-    </section>
+
+      {/* Floating status cards */}
+      <div className="pointer-events-none absolute -left-3 -bottom-6 hidden items-center gap-3 rounded-2xl border border-border bg-card p-3 pr-4 shadow-elevated backdrop-blur lg:flex">
+        <div className="grid h-10 w-10 place-items-center rounded-xl bg-success/15 text-success">
+          <Check className="h-5 w-5" strokeWidth={2.5} />
+        </div>
+        <div>
+          <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-muted-foreground">Meeting booked</p>
+          <p className="text-[12px] font-semibold text-foreground">Priya Patel · Sat 11:00</p>
+        </div>
+      </div>
+      <div className="pointer-events-none absolute -right-3 -top-6 hidden items-center gap-3 rounded-2xl border border-border bg-card p-3 pr-4 shadow-elevated backdrop-blur lg:flex">
+        <div
+          className="grid h-10 w-10 place-items-center rounded-xl text-primary-foreground"
+          style={{ background: "var(--gradient-primary)" }}
+        >
+          <Zap className="h-5 w-5" strokeWidth={2.5} />
+        </div>
+        <div>
+          <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-muted-foreground">Pickup rate</p>
+          <p className="text-[12px] font-semibold text-foreground">
+            <span className="gradient-text">+34%</span> this month
+          </p>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function TranscriptBubble({
+  who,
+  text,
+  mirror,
+}: {
+  who: "AI" | "You";
+  text: string;
+  mirror?: boolean;
+}) {
+  return (
+    <div className={"flex gap-3 " + (mirror ? "flex-row-reverse" : "")}>
+      <div
+        className={
+          "grid h-8 w-8 shrink-0 place-items-center rounded-lg text-[10px] font-bold " +
+          (who === "AI"
+            ? "bg-foreground text-background"
+            : "bg-primary/15 text-primary")
+        }
+      >
+        {who}
+      </div>
+      <div
+        className={
+          "max-w-[78%] rounded-2xl border p-3.5 text-[13px] leading-relaxed shadow-sm " +
+          (mirror
+            ? "rounded-tr-none border-primary/25 text-primary-foreground"
+            : "rounded-tl-none border-border bg-card text-foreground/85")
+        }
+        style={mirror ? { background: "var(--gradient-primary)" } : undefined}
+      >
+        {text}
+      </div>
+    </div>
   );
 }
 
@@ -354,35 +734,51 @@ function Hero() {
 function LogoStrip() {
   const logos = ["PROPTECH.CO", "EDMAX", "SUNRISE INS.", "CODEKUL", "URBANFIT", "MEDIQ", "FLYBOX"];
   return (
-    <section className="border-y border-white/5 bg-white/[0.015]">
+    <section className="border-y border-border/70 bg-surface/70">
       <div className="mx-auto max-w-7xl px-4 py-8 sm:px-6">
-        <p className="text-center text-[11px] uppercase tracking-[0.3em] text-white/40">
+        <p className="text-center text-[11px] uppercase tracking-[0.3em] text-muted-foreground">
           Powering outbound at 400+ Indian SMBs
         </p>
-        <div className="mt-5 flex flex-wrap items-center justify-center gap-x-10 gap-y-3">
-          {logos.map((l) => (
-            <span key={l} className="text-sm font-semibold tracking-widest text-white/30 transition-colors hover:text-white/70">
-              {l}
-            </span>
-          ))}
+        <div
+          className="mt-5 overflow-hidden"
+          style={{
+            maskImage:
+              "linear-gradient(to right, transparent, black 8%, black 92%, transparent)",
+            WebkitMaskImage:
+              "linear-gradient(to right, transparent, black 8%, black 92%, transparent)",
+          }}
+        >
+          <div className="flex w-max animate-[logo-scroll_28s_linear_infinite] items-center gap-x-10 sm:gap-x-14">
+            {[...logos, ...logos].map((l, i) => (
+              <span key={`${l}-${i}`} className="flex shrink-0 items-center gap-x-10 sm:gap-x-14">
+                <span className="text-sm font-semibold tracking-widest text-muted-foreground/70 transition-colors hover:text-foreground">
+                  {l}
+                </span>
+                <span aria-hidden className="h-1 w-1 shrink-0 rounded-full bg-border" />
+              </span>
+            ))}
+          </div>
+          <style>{`@keyframes logo-scroll { from { transform: translateX(0); } to { transform: translateX(-50%); } }`}</style>
         </div>
       </div>
     </section>
   );
 }
 
+
 /* ---------- stats ---------- */
 function StatsStrip() {
   return (
     <section>
-      <div className="mx-auto grid max-w-7xl grid-cols-2 gap-6 px-4 py-16 sm:px-6 md:grid-cols-4">
+      <div className="mx-auto grid max-w-7xl grid-cols-2 gap-4 px-4 py-16 sm:gap-6 sm:px-6 lg:grid-cols-4">
         {stats.map(([k, v]) => (
-          <div key={k} className="group relative overflow-hidden rounded-2xl border border-white/10 bg-white/[0.02] p-6 text-center backdrop-blur transition-colors hover:border-[#7c5cff]/40">
-            <p className="tabular bg-gradient-to-b from-white to-white/60 bg-clip-text text-3xl font-bold text-transparent sm:text-4xl">
-              {v}
-            </p>
-            <p className="mt-2 text-[11px] uppercase tracking-[0.2em] text-white/40">{k}</p>
-            <span className="absolute inset-x-0 -bottom-px h-px bg-gradient-to-r from-transparent via-[#7c5cff] to-transparent opacity-0 transition-opacity group-hover:opacity-100" />
+          <div
+            key={k}
+            className="group relative overflow-hidden rounded-2xl border border-border bg-card p-6 text-center transition-colors hover:border-primary/40"
+          >
+            <p className="tabular gradient-text text-[26px] font-bold leading-none sm:text-4xl">{v}</p>
+            <p className="mt-2 text-[10px] uppercase tracking-[0.18em] text-muted-foreground sm:text-[11px] sm:tracking-[0.2em]">{k}</p>
+            <span className="absolute inset-x-0 -bottom-px h-px bg-gradient-to-r from-transparent via-primary to-transparent opacity-0 transition-opacity group-hover:opacity-100" />
           </div>
         ))}
       </div>
@@ -396,59 +792,56 @@ const features = [
     icon: PhoneCall,
     title: "AI voice agents",
     body: "Sub-200ms latency. Trained on your script in minutes. Sounds human enough to fool your own mother.",
-    accent: "from-[#7c5cff] to-[#a78bfa]",
   },
   {
     icon: Radio,
     title: "Live call board",
     body: "Every conversation, in real time. Barge in, whisper coaching, or slam the takeover button.",
-    accent: "from-[#ff3d81] to-[#f59e0b]",
   },
   {
     icon: BarChart3,
     title: "Analytics & recordings",
     body: "Transcripts, sentiment, outcome tagging, and a firehose of insights. One-click CRM export.",
-    accent: "from-[#22d3ee] to-[#7c5cff]",
   },
   {
     icon: ShieldCheck,
     title: "DPDP-ready",
     body: "DND/NDNC scrubbing, recorded consent, and Indian data residency. Sleep at night.",
-    accent: "from-emerald-400 to-[#22d3ee]",
   },
 ];
 
 function Features() {
   return (
     <section id="features" className="relative">
-      <div className="mx-auto max-w-7xl px-4 py-24 sm:px-6">
+      <div className="mx-auto max-w-7xl px-4 py-16 sm:px-6 sm:py-24">
         <div className="max-w-2xl">
-          <p className="text-[11px] font-semibold uppercase tracking-[0.3em] text-[#a78bfa]">
-            <Bolt className="mr-1 inline h-3 w-3" /> The platform
+          <p className="text-[10px] font-semibold uppercase tracking-[0.3em] text-primary sm:text-[11px]">
+            <Sparkles className="mr-1 inline h-3 w-3" /> The platform
           </p>
-          <h2 className="mt-3 text-4xl font-bold tracking-tight sm:text-5xl">
-            Everything Apollo wishes
+          <h2 className="mt-3 text-2xl font-bold tracking-tight sm:text-4xl lg:text-5xl">
+            Everything LeadGen+ wishes
             <br />
-            <span className="bg-gradient-to-r from-[#a78bfa] to-[#ff3d81] bg-clip-text text-transparent">
-              they'd shipped.
-            </span>
+            <span className="gradient-text">they'd shipped.</span>
           </h2>
-          <p className="mt-4 text-white/60">
+          <p className="mt-3 text-sm text-muted-foreground sm:mt-4 sm:text-base">
             One console. Every outbound motion. Zero duct tape.
           </p>
         </div>
-        <div className="mt-14 grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
-          {features.map(({ icon: Icon, title, body, accent }) => (
+        <div className="mt-8 grid grid-cols-2 gap-3 sm:mt-14 sm:gap-5 lg:grid-cols-4">
+          {features.map(({ icon: Icon, title, body }) => (
             <div
               key={title}
-              className="group relative overflow-hidden rounded-2xl border border-white/10 bg-gradient-to-b from-white/[0.05] to-white/[0.01] p-6 transition-all hover:-translate-y-1 hover:border-white/25"
+              className="group relative overflow-hidden rounded-2xl border border-border bg-card p-4 transition-all hover:-translate-y-1 hover:border-primary/40 hover:shadow-elevated sm:p-6"
             >
-              <div className={`grid h-11 w-11 place-items-center rounded-xl bg-gradient-to-br ${accent} shadow-lg`}>
-                <Icon className="h-5 w-5 text-white" strokeWidth={2.2} />
+              <div
+                className="grid h-9 w-9 place-items-center rounded-xl text-primary-foreground shadow-[0_6px_20px_-8px_color-mix(in_oklab,var(--color-primary)_70%,transparent)] sm:h-11 sm:w-11"
+                style={{ background: "var(--gradient-primary)" }}
+              >
+                <Icon className="h-4 w-4 sm:h-5 sm:w-5" strokeWidth={2.2} />
               </div>
-              <h3 className="mt-5 text-lg font-semibold text-white">{title}</h3>
-              <p className="mt-2 text-sm leading-relaxed text-white/55">{body}</p>
-              <span className={`pointer-events-none absolute -bottom-24 -right-24 h-48 w-48 rounded-full bg-gradient-to-br ${accent} opacity-0 blur-3xl transition-opacity group-hover:opacity-30`} />
+              <h3 className="mt-3 text-sm font-semibold text-foreground sm:mt-5 sm:text-lg">{title}</h3>
+              <p className="mt-1.5 text-[12px] leading-relaxed text-muted-foreground sm:mt-2 sm:text-sm">{body}</p>
+              <span className="pointer-events-none absolute -bottom-24 -right-24 h-48 w-48 rounded-full bg-primary/20 opacity-0 blur-3xl transition-opacity group-hover:opacity-100" />
             </div>
           ))}
         </div>
@@ -461,36 +854,43 @@ function Features() {
 function ShowcaseBand() {
   return (
     <section id="showcase" className="relative">
-      <div className="mx-auto max-w-7xl px-4 py-24 sm:px-6">
-        <div className="relative overflow-hidden rounded-3xl border border-white/10 bg-gradient-to-br from-[#1a1030] via-[#0d0b18] to-[#1a0a1f] p-10 sm:p-14">
-          <div className="absolute -top-24 right-0 h-64 w-64 rounded-full bg-[#7c5cff]/40 blur-3xl" />
-          <div className="absolute -bottom-24 -left-10 h-64 w-64 rounded-full bg-[#ff3d81]/30 blur-3xl" />
-          <div className="relative grid gap-10 lg:grid-cols-2 lg:items-center">
+      <div className="mx-auto max-w-7xl px-4 py-16 sm:px-6 sm:py-24">
+        <div
+          className="relative overflow-hidden rounded-3xl border border-primary/20 p-6 sm:p-14"
+          style={{
+            background:
+              "linear-gradient(135deg, color-mix(in oklab, var(--color-primary) 10%, var(--color-card)) 0%, var(--color-card) 60%, color-mix(in oklab, var(--color-primary-glow) 8%, var(--color-card)) 100%)",
+          }}
+        >
+          <div className="absolute -top-24 right-0 h-64 w-64 rounded-full bg-primary/25 blur-3xl" />
+          <div className="absolute -bottom-24 -left-10 h-64 w-64 rounded-full bg-primary-glow/25 blur-3xl" />
+          <div className="relative grid gap-8 lg:grid-cols-2 lg:items-center lg:gap-10">
             <div>
-              <p className="text-[11px] font-semibold uppercase tracking-[0.3em] text-[#a78bfa]">
+              <p className="text-[10px] font-semibold uppercase tracking-[0.3em] text-primary sm:text-[11px]">
                 Under the hood
               </p>
-              <h2 className="mt-3 text-4xl font-bold tracking-tight sm:text-5xl">
+              <h2 className="mt-3 text-2xl font-bold tracking-tight sm:text-4xl lg:text-5xl">
                 Ten thousand dials.
                 <br />
-                <span className="bg-gradient-to-r from-[#ff3d81] to-[#f59e0b] bg-clip-text text-transparent">
-                  One coffee break.
-                </span>
+                <span className="gradient-text">One coffee break.</span>
               </h2>
-              <p className="mt-5 text-white/60">
+              <p className="mt-4 text-sm text-muted-foreground sm:mt-5 sm:text-base">
                 LeadGen+ fires up parallel voice agents on your entire lead list. Warm callbacks
                 land in your CRM before you finish reviewing pipeline.
               </p>
-              <ul className="mt-6 space-y-2.5 text-sm">
+              <ul className="mt-5 space-y-2.5 text-[13px] sm:mt-6 sm:text-sm">
                 {[
                   "Concurrent AI callers — 1 to 1,000",
                   "Automatic retries on busy / no-answer",
                   "Sentiment-tagged transcripts, delivered live",
                   "Native WhatsApp follow-up after every call",
                 ].map((t) => (
-                  <li key={t} className="flex items-start gap-2.5 text-white/80">
-                    <span className="mt-0.5 grid h-4 w-4 shrink-0 place-items-center rounded-full bg-gradient-to-br from-[#7c5cff] to-[#ff3d81]">
-                      <Check className="h-3 w-3 text-white" strokeWidth={3} />
+                  <li key={t} className="flex items-start gap-2.5 text-foreground/85">
+                    <span
+                      className="mt-0.5 grid h-4 w-4 shrink-0 place-items-center rounded-full text-primary-foreground"
+                      style={{ background: "var(--gradient-primary)" }}
+                    >
+                      <Check className="h-3 w-3" strokeWidth={3} />
                     </span>
                     {t}
                   </li>
@@ -498,7 +898,7 @@ function ShowcaseBand() {
               </ul>
             </div>
             <div className="relative">
-              <div className="rounded-2xl border border-white/10 bg-black/40 p-5 font-mono text-[12px] leading-relaxed shadow-2xl backdrop-blur">
+              <div className="overflow-x-auto rounded-2xl border border-border bg-[#0d0b18] p-4 font-mono text-[11px] leading-relaxed text-white/80 shadow-2xl sm:p-5 sm:text-[12px]">
                 <p className="text-white/40">$ leadgen dial --campaign whitefield-3bhk --list leads.csv</p>
                 <p className="mt-2 text-emerald-400">✓ 2,431 numbers scrubbed against DND/NDNC</p>
                 <p className="text-emerald-400">✓ 12 agents spun up · avg latency 142ms</p>
@@ -506,7 +906,7 @@ function ShowcaseBand() {
                 <p className="text-white/60">  ├─ +91 98•••••210 · <span className="text-emerald-300">BOOKED</span> (Sat 11am)</p>
                 <p className="text-white/60">  ├─ +91 99•••••847 · <span className="text-emerald-300">BOOKED</span> (Sun 4pm)</p>
                 <p className="text-white/60">  ├─ +91 98•••••112 · <span className="text-white/40">voicemail — retrying</span></p>
-                <p className="text-white/60">  └─ +91 90•••••334 · <span className="text-[#ff3d81]">not interested</span></p>
+                <p className="text-white/60">  └─ +91 90•••••334 · <span className="text-[#ff8fb0]">not interested</span></p>
                 <p className="mt-2 text-white">Cost so far: <span className="text-[#f59e0b]">₹184</span> · Meetings: <span className="text-emerald-300">27</span></p>
                 <p className="mt-2 flex items-center gap-1 text-[#a78bfa]">
                   <span className="h-2 w-2 animate-pulse rounded-full bg-[#a78bfa]" /> running · press ⌘. to intervene
@@ -524,57 +924,54 @@ function ShowcaseBand() {
 function Pricing() {
   return (
     <section id="pricing" className="relative">
-      <div className="mx-auto max-w-7xl px-4 py-24 sm:px-6">
+      <div className="mx-auto max-w-7xl px-4 py-16 sm:px-6 sm:py-24">
         <div className="mx-auto max-w-2xl text-center">
-          <p className="text-[11px] font-semibold uppercase tracking-[0.3em] text-[#a78bfa]">Pricing</p>
-          <h2 className="mt-3 text-4xl font-bold tracking-tight sm:text-5xl">
+          <p className="text-[10px] font-semibold uppercase tracking-[0.3em] text-primary sm:text-[11px]">Pricing</p>
+          <h2 className="mt-3 text-2xl font-bold tracking-tight sm:text-4xl lg:text-5xl">
             Priced per minute.
             <br />
-            <span className="bg-gradient-to-r from-[#a78bfa] to-[#ff3d81] bg-clip-text text-transparent">
-              Not per victim.
-            </span>
+            <span className="gradient-text">Not per victim.</span>
           </h2>
-          <p className="mt-4 text-white/60">
+          <p className="mt-3 text-sm text-muted-foreground sm:mt-4 sm:text-base">
             Monthly plans include a pool of AI call minutes. Overage at ₹2/min. Cancel any time.
           </p>
         </div>
-        <div className="mt-14 grid gap-6 lg:grid-cols-3">
+        <div className="mt-8 grid gap-4 sm:mt-14 sm:gap-6 lg:grid-cols-3">
           {tiers.map((tier) => (
             <div
               key={tier.name}
               className={
-                "group relative flex flex-col overflow-hidden rounded-2xl p-7 transition-all " +
+                "group relative flex flex-col overflow-hidden rounded-2xl p-5 transition-all sm:p-7 " +
                 (tier.highlight
-                  ? "border border-[#7c5cff]/40 bg-gradient-to-b from-[#7c5cff]/[0.12] to-[#ff3d81]/[0.06] shadow-[0_0_60px_-20px_rgba(124,92,255,0.6)]"
-                  : "border border-white/10 bg-white/[0.02] hover:border-white/25")
+                  ? "border-2 border-primary/50 bg-card shadow-[0_20px_60px_-20px_color-mix(in_oklab,var(--color-primary)_45%,transparent)] lg:-translate-y-2"
+                  : "border border-border bg-card hover:border-primary/30")
               }
             >
               {tier.highlight && (
-                <>
-                  <span className="absolute -top-px left-8 right-8 h-px bg-gradient-to-r from-transparent via-[#ff3d81] to-transparent" />
-                  <span className="absolute right-5 top-5 rounded-full bg-gradient-to-r from-[#7c5cff] to-[#ff3d81] px-2.5 py-1 text-[10px] font-bold uppercase tracking-widest text-white">
-                    Most popular
-                  </span>
-                </>
+                <span
+                  className="absolute right-4 top-4 rounded-full px-2 py-0.5 text-[9px] font-bold uppercase tracking-widest text-primary-foreground sm:right-5 sm:top-5 sm:px-2.5 sm:py-1 sm:text-[10px]"
+                  style={{ background: "var(--gradient-primary)" }}
+                >
+                  Most popular
+                </span>
               )}
-              <h3 className="text-lg font-semibold text-white">{tier.name}</h3>
-              <p className="mt-1 text-sm text-white/50">{tier.tagline}</p>
-              <div className="mt-6 flex items-baseline gap-1">
-                <span className="text-5xl font-bold tracking-tight text-white">{tier.price}</span>
-                <span className="text-sm text-white/40">{tier.cadence}</span>
+              <h3 className="text-base font-semibold text-foreground sm:text-lg">{tier.name}</h3>
+              <p className="mt-1 text-[13px] text-muted-foreground sm:text-sm">{tier.tagline}</p>
+              <div className="mt-5 flex items-baseline gap-1 sm:mt-6">
+                <span className="text-4xl font-bold tracking-tight text-foreground sm:text-5xl">{tier.price}</span>
+                <span className="text-[13px] text-muted-foreground sm:text-sm">{tier.cadence}</span>
               </div>
-              <ul className="mt-7 flex-1 space-y-3">
+              <ul className="mt-6 flex-1 space-y-2.5 sm:mt-7 sm:space-y-3">
                 {tier.features.map((f) => (
-                  <li key={f} className="flex items-start gap-2.5 text-sm text-white/80">
+                  <li key={f} className="flex items-start gap-2.5 text-[13px] text-foreground/85 sm:text-sm">
                     <span
                       className={
-                        "mt-0.5 grid h-4 w-4 shrink-0 place-items-center rounded-full " +
-                        (tier.highlight
-                          ? "bg-gradient-to-br from-[#7c5cff] to-[#ff3d81]"
-                          : "bg-white/10")
+                        "mt-0.5 grid h-4 w-4 shrink-0 place-items-center rounded-full text-primary-foreground " +
+                        (tier.highlight ? "" : "bg-muted !text-muted-foreground")
                       }
+                      style={tier.highlight ? { background: "var(--gradient-primary)" } : undefined}
                     >
-                      <Check className="h-3 w-3 text-white" strokeWidth={3} />
+                      <Check className="h-3 w-3" strokeWidth={3} />
                     </span>
                     <span>{f}</span>
                   </li>
@@ -585,9 +982,10 @@ function Pricing() {
                 className={
                   "mt-8 inline-flex items-center justify-center gap-2 rounded-xl px-5 py-3 text-sm font-semibold transition-all " +
                   (tier.highlight
-                    ? "bg-gradient-to-r from-[#7c5cff] to-[#ff3d81] text-white shadow-[0_0_30px_-8px_rgba(124,92,255,0.9)] hover:-translate-y-0.5"
-                    : "border border-white/15 bg-white/5 text-white hover:bg-white/10")
+                    ? "text-primary-foreground shadow-[0_10px_30px_-10px_color-mix(in_oklab,var(--color-primary)_80%,transparent)] hover:-translate-y-0.5"
+                    : "border border-border bg-background text-foreground hover:bg-accent")
                 }
+                style={tier.highlight ? { background: "var(--gradient-primary)" } : undefined}
               >
                 {tier.cta} <ArrowRight className="h-4 w-4" />
               </a>
@@ -620,26 +1018,29 @@ function Testimonials() {
   ];
   return (
     <section className="relative">
-      <div className="mx-auto max-w-7xl px-4 py-24 sm:px-6">
-        <div className="grid gap-6 md:grid-cols-3">
+      <div className="mx-auto max-w-7xl px-4 py-16 sm:px-6 sm:py-24">
+        <div className="grid gap-4 sm:gap-6 md:grid-cols-3">
           {quotes.map((t) => (
             <figure
               key={t.a}
-              className="relative rounded-2xl border border-white/10 bg-gradient-to-b from-white/[0.04] to-transparent p-7"
+              className="relative rounded-2xl border border-border bg-card p-5 transition-colors hover:border-primary/30 sm:p-7"
             >
-              <div className="flex gap-0.5 text-[#f59e0b]">
+              <div className="flex gap-0.5 text-warning">
                 {Array.from({ length: 5 }).map((_, i) => (
                   <Star key={i} className="h-3.5 w-3.5 fill-current" />
                 ))}
               </div>
-              <blockquote className="mt-4 text-[15px] leading-relaxed text-white/85">"{t.q}"</blockquote>
-              <figcaption className="mt-5 flex items-center gap-3">
-                <span className="grid h-9 w-9 place-items-center rounded-full bg-gradient-to-br from-[#7c5cff] to-[#ff3d81] text-sm font-bold text-white">
+              <blockquote className="mt-3 text-[13.5px] leading-relaxed text-foreground/90 sm:mt-4 sm:text-[15px]">"{t.q}"</blockquote>
+              <figcaption className="mt-4 flex items-center gap-3 sm:mt-5">
+                <span
+                  className="grid h-8 w-8 place-items-center rounded-full text-sm font-bold text-primary-foreground sm:h-9 sm:w-9"
+                  style={{ background: "var(--gradient-primary)" }}
+                >
                   {t.a[0]}
                 </span>
-                <div>
-                  <p className="text-sm font-semibold text-white">{t.a}</p>
-                  <p className="text-[11px] text-white/40">{t.r}</p>
+                <div className="min-w-0">
+                  <p className="truncate text-sm font-semibold text-foreground">{t.a}</p>
+                  <p className="truncate text-[11px] text-muted-foreground">{t.r}</p>
                 </div>
               </figcaption>
             </figure>
@@ -685,29 +1086,30 @@ function DemoForm() {
 
   return (
     <section id="demo" className="relative">
-      <div className="mx-auto grid max-w-7xl gap-12 px-4 py-24 sm:px-6 lg:grid-cols-2 lg:items-center">
+      <div className="mx-auto grid max-w-7xl gap-8 px-4 py-16 sm:px-6 sm:py-24 lg:grid-cols-2 lg:items-center lg:gap-12">
         <div>
-          <p className="text-[11px] font-semibold uppercase tracking-[0.3em] text-[#a78bfa]">Book a demo</p>
-          <h2 className="mt-3 text-4xl font-bold tracking-tight sm:text-5xl">
+          <p className="text-[10px] font-semibold uppercase tracking-[0.3em] text-primary sm:text-[11px]">Book a demo</p>
+          <h2 className="mt-3 text-2xl font-bold tracking-tight sm:text-4xl lg:text-5xl">
             See it dial your leads.
             <br />
-            <span className="bg-gradient-to-r from-[#a78bfa] to-[#ff3d81] bg-clip-text text-transparent">
-              Live. On this call.
-            </span>
+            <span className="gradient-text">Live. On this call.</span>
           </h2>
-          <p className="mt-5 text-white/60">
+          <p className="mt-4 text-sm text-muted-foreground sm:mt-5 sm:text-base">
             30-minute demo. We'll spin up an AI agent on your script and dial 5 real numbers from
             your list. You decide if it's ready for production.
           </p>
-          <ul className="mt-8 space-y-3.5">
+          <ul className="mt-6 space-y-3 sm:mt-8 sm:space-y-3.5">
             {[
               [Zap, "Live call within the demo"],
               [Users, "Tailored to your vertical"],
               [ShieldCheck, "NDA on request"],
             ].map(([Icon, text]) => (
-              <li key={String(text)} className="flex items-start gap-3 text-sm text-white/85">
-                <span className="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-gradient-to-br from-[#7c5cff] to-[#ff3d81]">
-                  <Icon className="h-4 w-4 text-white" />
+              <li key={String(text)} className="flex items-start gap-3 text-[13px] text-foreground/85 sm:text-sm">
+                <span
+                  className="grid h-7 w-7 shrink-0 place-items-center rounded-lg text-primary-foreground sm:h-8 sm:w-8"
+                  style={{ background: "var(--gradient-primary)" }}
+                >
+                  <Icon className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
                 </span>
                 {text as string}
               </li>
@@ -716,16 +1118,22 @@ function DemoForm() {
         </div>
 
         <div className="relative">
-          <div className="absolute -inset-4 rounded-3xl bg-gradient-to-br from-[#7c5cff]/30 to-[#ff3d81]/20 opacity-60 blur-2xl" />
-          <div className="relative rounded-2xl border border-white/10 bg-[#0d0b18]/90 p-7 shadow-2xl backdrop-blur sm:p-9">
+          <div
+            className="absolute -inset-4 rounded-3xl opacity-40 blur-2xl"
+            style={{ background: "var(--gradient-primary)" }}
+          />
+          <div className="relative rounded-2xl border border-border bg-card p-5 shadow-elevated sm:p-9">
             {submitted ? (
               <div className="flex h-full flex-col items-center justify-center py-14 text-center">
-                <div className="grid h-14 w-14 place-items-center rounded-full bg-gradient-to-br from-[#7c5cff] to-[#ff3d81]">
-                  <Check className="h-7 w-7 text-white" strokeWidth={3} />
+                <div
+                  className="grid h-14 w-14 place-items-center rounded-full text-primary-foreground"
+                  style={{ background: "var(--gradient-primary)" }}
+                >
+                  <Check className="h-7 w-7" strokeWidth={3} />
                 </div>
-                <h3 className="mt-5 text-2xl font-semibold text-white">You're on the list.</h3>
-                <p className="mt-2 text-sm text-white/60">
-                  We'll email <span className="font-medium text-white">{form.email}</span> within
+                <h3 className="mt-5 text-2xl font-semibold text-foreground">You're on the list.</h3>
+                <p className="mt-2 text-sm text-muted-foreground">
+                  We'll email <span className="font-medium text-foreground">{form.email}</span> within
                   one business day.
                 </p>
               </div>
@@ -740,42 +1148,43 @@ function DemoForm() {
                   <Field label="Phone" type="tel" value={form.phone} onChange={(v) => update("phone", v)} />
                 </div>
                 <div>
-                  <label className="mb-1.5 block text-[10px] font-semibold uppercase tracking-[0.2em] text-white/50">
+                  <label className="mb-1.5 block text-[10px] font-semibold uppercase tracking-[0.2em] text-muted-foreground">
                     Monthly call volume
                   </label>
                   <select
                     value={form.volume}
                     onChange={(e) => update("volume", e.target.value)}
-                    className="w-full rounded-xl border border-white/10 bg-white/[0.03] px-3.5 py-2.5 text-sm text-white focus:border-[#7c5cff] focus:outline-none focus:ring-2 focus:ring-[#7c5cff]/30"
+                    className="w-full rounded-xl border border-border bg-background px-3.5 py-2.5 text-sm text-foreground focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/25"
                   >
-                    <option value="" className="bg-[#0d0b18]">Select a range…</option>
-                    <option className="bg-[#0d0b18]">Under 1,000 calls</option>
-                    <option className="bg-[#0d0b18]">1,000 – 10,000 calls</option>
-                    <option className="bg-[#0d0b18]">10,000 – 50,000 calls</option>
-                    <option className="bg-[#0d0b18]">50,000+ calls</option>
+                    <option value="">Select a range…</option>
+                    <option>Under 1,000 calls</option>
+                    <option>1,000 – 10,000 calls</option>
+                    <option>10,000 – 50,000 calls</option>
+                    <option>50,000+ calls</option>
                   </select>
                 </div>
                 <div>
-                  <label className="mb-1.5 block text-[10px] font-semibold uppercase tracking-[0.2em] text-white/50">
+                  <label className="mb-1.5 block text-[10px] font-semibold uppercase tracking-[0.2em] text-muted-foreground">
                     What should the agent do?
                   </label>
                   <textarea
                     value={form.notes}
                     onChange={(e) => update("notes", e.target.value)}
                     rows={3}
-                    className="w-full rounded-xl border border-white/10 bg-white/[0.03] px-3.5 py-2.5 text-sm text-white placeholder:text-white/30 focus:border-[#7c5cff] focus:outline-none focus:ring-2 focus:ring-[#7c5cff]/30"
+                    className="w-full rounded-xl border border-border bg-background px-3.5 py-2.5 text-sm text-foreground placeholder:text-muted-foreground focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/25"
                     placeholder="e.g. Qualify real-estate site-visit leads and book callbacks."
                   />
                 </div>
                 <button
                   type="submit"
                   disabled={submitting}
-                  className="group relative inline-flex w-full items-center justify-center gap-2 overflow-hidden rounded-xl bg-gradient-to-r from-[#7c5cff] to-[#ff3d81] px-5 py-3 text-sm font-semibold text-white shadow-[0_0_30px_-8px_rgba(124,92,255,0.9)] transition-transform hover:-translate-y-0.5 disabled:opacity-60"
+                  className="group relative inline-flex w-full items-center justify-center gap-2 overflow-hidden rounded-xl px-5 py-3 text-sm font-semibold text-primary-foreground shadow-[0_10px_30px_-10px_color-mix(in_oklab,var(--color-primary)_80%,transparent)] transition-transform hover:-translate-y-0.5 disabled:opacity-60"
+                  style={{ background: "var(--gradient-primary)" }}
                 >
                   {submitting ? "Sending…" : "Book my demo"}
                   {!submitting && <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-0.5" />}
                 </button>
-                <p className="text-center text-[11px] text-white/40">
+                <p className="text-center text-[11px] text-muted-foreground">
                   By submitting you agree to our terms. We'll never share your data.
                 </p>
               </form>
@@ -802,15 +1211,15 @@ function Field({
 }) {
   return (
     <div>
-      <label className="mb-1.5 block text-[10px] font-semibold uppercase tracking-[0.2em] text-white/50">
-        {label} {required && <span className="text-[#ff3d81]">*</span>}
+      <label className="mb-1.5 block text-[10px] font-semibold uppercase tracking-[0.2em] text-muted-foreground">
+        {label} {required && <span className="text-primary">*</span>}
       </label>
       <input
         type={type}
         required={required}
         value={value}
         onChange={(e) => onChange(e.target.value)}
-        className="w-full rounded-xl border border-white/10 bg-white/[0.03] px-3.5 py-2.5 text-sm text-white placeholder:text-white/30 focus:border-[#7c5cff] focus:outline-none focus:ring-2 focus:ring-[#7c5cff]/30"
+        className="w-full rounded-xl border border-border bg-background px-3.5 py-2.5 text-sm text-foreground placeholder:text-muted-foreground focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/25"
       />
     </div>
   );
@@ -818,15 +1227,15 @@ function Field({
 
 function Footer() {
   return (
-    <footer className="border-t border-white/5">
-      <div className="mx-auto flex max-w-7xl flex-col items-center justify-between gap-4 px-4 py-10 text-xs text-white/40 sm:flex-row sm:px-6">
+    <footer className="border-t border-border">
+      <div className="mx-auto flex max-w-7xl flex-col items-center justify-between gap-4 px-4 py-10 text-xs text-muted-foreground sm:flex-row sm:px-6">
         <p>© {new Date().getFullYear()} LeadGen+. Made in India, dialing the world.</p>
         <div className="flex flex-wrap items-center justify-center gap-x-6 gap-y-2">
-          <a href="#features" className="transition-colors hover:text-white">Features</a>
-          <a href="#pricing" className="transition-colors hover:text-white">Pricing</a>
-          <Link to="/terms" className="transition-colors hover:text-white">Terms</Link>
-          <Link to="/privacy" className="transition-colors hover:text-white">Privacy</Link>
-          <Link to="/login" className="transition-colors hover:text-white">Sign in</Link>
+          <a href="#features" className="transition-colors hover:text-foreground">Features</a>
+          <a href="#pricing" className="transition-colors hover:text-foreground">Pricing</a>
+          <Link to="/terms" className="transition-colors hover:text-foreground">Terms</Link>
+          <Link to="/privacy" className="transition-colors hover:text-foreground">Privacy</Link>
+          <Link to="/login" className="transition-colors hover:text-foreground">Sign in</Link>
         </div>
       </div>
     </footer>

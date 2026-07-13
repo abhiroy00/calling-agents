@@ -72,7 +72,7 @@ function HistoryPage() {
         ]}
       />
 
-      <div className="mb-4 flex flex-wrap items-center gap-1.5 rounded-xl border border-border bg-card p-2 shadow-(--shadow-card)">
+      <div className="mb-4 flex flex-wrap items-center gap-1.5 rounded-xl border border-border bg-card p-2 shadow-[var(--shadow-card)]">
         <Chip label="Today" active={range === "today"} onClick={() => setRange("today")} />
         <Chip label="Last 7 days" active={range === "7d"} onClick={() => setRange("7d")} />
         <Chip label="Last 30 days" active={range === "30d"} onClick={() => setRange("30d")} />
