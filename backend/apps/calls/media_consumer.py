@@ -9,7 +9,6 @@ import asyncio
 import base64
 import json
 import logging
-import time
 
 from channels.db import database_sync_to_async
 from channels.generic.websocket import AsyncWebsocketConsumer
@@ -33,9 +32,7 @@ class ExotelMediaConsumer(AsyncWebsocketConsumer):
         self.bridge = None
         self._out_buf = bytearray()
         self._resp_pcm = 0  # bytes sent to Exotel for the response in flight
-        self._resp_started_at = None  # monotonic time the first chunk was sent
         self._last_resp_seconds = 0.0
-        self._last_resp_started = None
         await self.accept()
 
     async def disconnect(self, code):
@@ -107,28 +104,22 @@ class ExotelMediaConsumer(AsyncWebsocketConsumer):
             pad = (-len(pcm)) % OUT_FRAME
             await self._send_media(pcm + b'\x00' * pad)
         self._last_resp_seconds = self._resp_pcm / PCM_BYTES_PER_SEC
-        self._last_resp_started = self._resp_started_at
         self._resp_pcm = 0
-        self._resp_started_at = None
 
     async def _hangup(self):
         """The agent called end_call: let the goodbye finish playing, then
         close the stream, which makes Exotel end the call.
 
-        We push audio to Exotel faster than real time, so playback lags what
-        we've sent. Exotel started playing roughly when we sent the first
-        chunk; whatever hasn't played yet is duration minus elapsed.
+        We push audio to Exotel faster than real time, so the whole goodbye is
+        already queued on their side — waiting its full duration is a safe
+        upper bound on the remaining playback.
         """
-        remaining = self._last_resp_seconds
-        if self._last_resp_started is not None:
-            remaining -= time.monotonic() - self._last_resp_started
-        await asyncio.sleep(max(0.0, remaining) + 0.3)
+        await asyncio.sleep(self._last_resp_seconds + 0.5)
         await self.close()
 
     async def _barge_in(self):
         self._out_buf.clear()
         self._resp_pcm = 0
-        self._resp_started_at = None
         if self.stream_sid:
             await self.send(text_data=json.dumps({
                 'event': 'clear',
@@ -147,8 +138,6 @@ class ExotelMediaConsumer(AsyncWebsocketConsumer):
     # --- helpers ----------------------------------------------------------
 
     async def _send_media(self, pcm: bytes):
-        if self._resp_pcm == 0:
-            self._resp_started_at = time.monotonic()
         self._resp_pcm += len(pcm)
         await self.send(text_data=json.dumps({
             'event': 'media',
