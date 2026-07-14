@@ -31,6 +31,38 @@ LANGUAGE_POLICY = (
     'If you could not understand the caller, ask them to repeat, in English.'
 )
 
+# gpt-realtime generates speech directly, so without an explicit anchor the
+# voice character can drift (e.g. female → male) mid-call on noisy phone audio.
+VOICE_POLICY = (
+    ' VOICE RULES: You have ONE fixed voice. Speak with exactly the same '
+    'voice, gender, tone, and accent from the first word of the call to the '
+    'last. NEVER change your voice character or imitate the caller or any '
+    'background speaker.'
+)
+
+# Without this the model happily keeps pitching after the caller has already
+# said goodbye. end_call is a session tool handled below in _recv_loop.
+CALL_END_POLICY = (
+    ' CALL ENDING RULES: When the caller indicates the conversation is over — '
+    'for example "thank you", "thanks", "bye", "goodbye", "theek hai bye", '
+    '"not interested", "do not call again", or "I have to go" — reply with ONE '
+    'short polite goodbye sentence and then call the end_call function. '
+    'Do NOT continue the pitch, ask another question, or start a new topic '
+    'after the caller has said goodbye.'
+)
+
+END_CALL_TOOL = {
+    'type': 'function',
+    'name': 'end_call',
+    'description': (
+        'Hang up the phone call. Use this immediately after saying a short '
+        'goodbye, once the caller has indicated the conversation is over '
+        '(said thank you / bye / not interested) or the purpose of the call '
+        'is complete.'
+    ),
+    'parameters': {'type': 'object', 'properties': {}, 'required': []},
+}
+
 
 class RealtimeBridge:
     """Owns the OpenAI Realtime WebSocket (and optional TTS) for one call.
@@ -40,14 +72,17 @@ class RealtimeBridge:
       on_audio_done()        — AI finished a response (flush playback buffer)
       on_transcript(role, text) — completed transcript ('human' or 'ai')
       on_interrupt()         — caller started speaking; stop playback (barge-in)
+      on_hangup()            — the agent decided the call is over (end_call tool)
     """
 
-    def __init__(self, system_prompt, on_audio, on_audio_done, on_transcript, on_interrupt):
+    def __init__(self, system_prompt, on_audio, on_audio_done, on_transcript, on_interrupt,
+                 on_hangup=None):
         self.system_prompt = system_prompt
         self.on_audio = on_audio
         self.on_audio_done = on_audio_done
         self.on_transcript = on_transcript
         self.on_interrupt = on_interrupt
+        self.on_hangup = on_hangup
         self.ws = None
         self._recv_task = None
         self._text_buf = ''
@@ -68,7 +103,20 @@ class RealtimeBridge:
         audio_config = {
             'input': {
                 'format': {'type': 'audio/pcmu'},
-                'turn_detection': {'type': 'server_vad'},
+                # Filters background noise/voices before VAD sees the audio.
+                # near_field = close-talking mic, which a phone handset is.
+                'noise_reduction': {'type': 'near_field'},
+                'turn_detection': {
+                    'type': 'server_vad',
+                    # Default threshold (0.5) lets distant background voices
+                    # trigger barge-in, which pauses the agent mid-sentence.
+                    # Higher = only the caller's own (louder) voice counts.
+                    'threshold': 0.85,
+                    'prefix_padding_ms': 300,
+                    # Wait a bit longer before treating silence as end-of-turn,
+                    # so brief background chatter doesn't split the caller's turn.
+                    'silence_duration_ms': 700,
+                },
                 'transcription': {
                     'model': 'gpt-4o-mini-transcribe',
                     # Steers language autodetection on noisy phone audio
@@ -88,8 +136,10 @@ class RealtimeBridge:
             'session': {
                 'type': 'realtime',
                 'output_modalities': ['text'] if self._tts else ['audio'],
-                'instructions': self.system_prompt + LANGUAGE_POLICY,
+                'instructions': self.system_prompt + LANGUAGE_POLICY + VOICE_POLICY + CALL_END_POLICY,
                 'audio': audio_config,
+                'tools': [END_CALL_TOOL],
+                'tool_choice': 'auto',
             },
         })
         # Have the AI speak first.
@@ -139,6 +189,15 @@ class RealtimeBridge:
         except Exception:
             logger.exception('ElevenLabs TTS streaming failed')
 
+    @staticmethod
+    def _response_called_end_call(event: dict) -> bool:
+        """True if a completed response includes a call to the end_call tool."""
+        output = (event.get('response') or {}).get('output') or []
+        return any(
+            item.get('type') == 'function_call' and item.get('name') == 'end_call'
+            for item in output
+        )
+
     async def _recv_loop(self):
         try:
             async for raw in self.ws:
@@ -167,6 +226,17 @@ class RealtimeBridge:
                         self._tts_task = asyncio.create_task(self._speak(text))
 
                 # --- both modes ---
+                elif etype == 'response.done':
+                    if self._response_called_end_call(event) and self.on_hangup:
+                        # In ElevenLabs mode the goodbye is still streaming out
+                        # via TTS; let it finish before hanging up.
+                        if self._tts_task and not self._tts_task.done():
+                            try:
+                                await self._tts_task
+                            except asyncio.CancelledError:
+                                pass
+                        logger.info('Agent requested hangup via end_call')
+                        await self.on_hangup()
                 elif etype == 'input_audio_buffer.speech_started':
                     await self._cancel_tts()
                     await self.on_interrupt()

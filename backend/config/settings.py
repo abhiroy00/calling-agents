@@ -166,7 +166,9 @@ EXOTEL_FROM_NUMBER = config('EXOTEL_FROM_NUMBER', default='')
 EXOTEL_APP_ID = config('EXOTEL_APP_ID', default='')
 OPENAI_API_KEY = config('OPENAI_API_KEY', default='')
 OPENAI_REALTIME_MODEL = config('OPENAI_REALTIME_MODEL', default='gpt-realtime')
-OPENAI_REALTIME_VOICE = config('OPENAI_REALTIME_VOICE', default='alloy')
+# marin/cedar are the gpt-realtime-native voices; marin is distinctly female.
+# Ambiguous voices (alloy) tend to drift in gender mid-call on 8 kHz audio.
+OPENAI_REALTIME_VOICE = config('OPENAI_REALTIME_VOICE', default='marin')
 
 # 'openai' = Realtime speaks directly; 'elevenlabs' = Realtime thinks in text,
 # ElevenLabs provides the voice (better Hindi/Hinglish quality).

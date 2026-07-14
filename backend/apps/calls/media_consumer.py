@@ -5,6 +5,7 @@ applet, then streams the caller's audio as base64 PCM16LE 8 kHz inside JSON
 events. We bridge that audio to an OpenAI Realtime session and stream the AI's
 speech back on the same socket.
 """
+import asyncio
 import base64
 import json
 import logging
@@ -21,6 +22,7 @@ logger = logging.getLogger(__name__)
 # Exotel requires outgoing media payloads in multiples of 320 bytes (20 ms).
 OUT_FRAME = 320
 OUT_CHUNK = 3200  # 200 ms — Exotel's minimum recommended chunk
+PCM_BYTES_PER_SEC = 16000  # 8 kHz * 16-bit mono
 
 
 class ExotelMediaConsumer(AsyncWebsocketConsumer):
@@ -29,6 +31,8 @@ class ExotelMediaConsumer(AsyncWebsocketConsumer):
         self.stream_sid = None
         self.bridge = None
         self._out_buf = bytearray()
+        self._resp_pcm = 0  # bytes sent to Exotel for the response in flight
+        self._last_resp_seconds = 0.0
         await self.accept()
 
     async def disconnect(self, code):
@@ -76,6 +80,7 @@ class ExotelMediaConsumer(AsyncWebsocketConsumer):
             on_audio_done=self._flush_playback,
             on_transcript=self._save_transcript,
             on_interrupt=self._barge_in,
+            on_hangup=self._hangup,
         )
         await self.bridge.connect(
             greeting_hint=(
@@ -98,9 +103,23 @@ class ExotelMediaConsumer(AsyncWebsocketConsumer):
             self._out_buf.clear()
             pad = (-len(pcm)) % OUT_FRAME
             await self._send_media(pcm + b'\x00' * pad)
+        self._last_resp_seconds = self._resp_pcm / PCM_BYTES_PER_SEC
+        self._resp_pcm = 0
+
+    async def _hangup(self):
+        """The agent called end_call: let the goodbye finish playing, then
+        close the stream, which makes Exotel end the call.
+
+        We push audio to Exotel faster than real time, so the whole goodbye is
+        already queued on their side — waiting its full duration is a safe
+        upper bound on the remaining playback.
+        """
+        await asyncio.sleep(self._last_resp_seconds + 0.5)
+        await self.close()
 
     async def _barge_in(self):
         self._out_buf.clear()
+        self._resp_pcm = 0
         if self.stream_sid:
             await self.send(text_data=json.dumps({
                 'event': 'clear',
@@ -119,6 +138,7 @@ class ExotelMediaConsumer(AsyncWebsocketConsumer):
     # --- helpers ----------------------------------------------------------
 
     async def _send_media(self, pcm: bytes):
+        self._resp_pcm += len(pcm)
         await self.send(text_data=json.dumps({
             'event': 'media',
             'stream_sid': self.stream_sid,
