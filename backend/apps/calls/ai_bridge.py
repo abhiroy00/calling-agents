@@ -31,13 +31,23 @@ LANGUAGE_POLICY = (
     'If you could not understand the caller, ask them to repeat, in English.'
 )
 
+# Prepended BEFORE the campaign prompt: long campaign prompts dilute rules
+# appended at the end, and the feminine-grammar rule kept getting lost there.
+PERSONA_PREFIX = (
+    'You are a FEMALE voice agent. In Hindi, ALWAYS use feminine first-person '
+    'grammar: समझ गयी / करूँगी / बताऊँगी — NEVER समझ गया / करूँगा. '
+)
+
 # gpt-realtime generates speech directly, so without an explicit anchor the
 # voice character can drift (e.g. female → male) mid-call on noisy phone audio.
 VOICE_POLICY = (
-    ' VOICE RULES: You have ONE fixed voice. Speak with exactly the same '
-    'voice, gender, tone, and accent from the first word of the call to the '
-    'last. NEVER change your voice character or imitate the caller or any '
-    'background speaker.'
+    ' VOICE RULES: You are a FEMALE agent with ONE fixed voice. Speak with '
+    'exactly the same voice, gender, tone, and accent from the first word of '
+    'the call to the last. NEVER change your voice character or imitate the '
+    'caller or any background speaker. Because you are female, in Hindi you '
+    'MUST always use feminine first-person verb forms — say समझ गयी (never '
+    'समझ गया), करूँगी (never करूँगा), बताऊँगी, बोल रही हूँ — masculine forms '
+    'for yourself are always wrong.'
 )
 
 # Without this the model happily keeps pitching after the caller has already
@@ -45,8 +55,9 @@ VOICE_POLICY = (
 CALL_END_POLICY = (
     ' CALL ENDING RULES: When the caller indicates the conversation is over — '
     'for example "thank you", "thanks", "bye", "goodbye", "theek hai bye", '
-    '"not interested", "do not call again", or "I have to go" — reply with ONE '
-    'short polite goodbye sentence and then call the end_call function. '
+    '"not interested", "do not call again", or "I have to go" — reply with a '
+    'VERY short goodbye of at most 5 words (e.g. "Thank you, bye!" / '
+    '"धन्यवाद, bye!") and call the end_call function in the SAME response. '
     'Do NOT continue the pitch, ask another question, or start a new topic '
     'after the caller has said goodbye.'
 )
@@ -136,7 +147,8 @@ class RealtimeBridge:
             'session': {
                 'type': 'realtime',
                 'output_modalities': ['text'] if self._tts else ['audio'],
-                'instructions': self.system_prompt + LANGUAGE_POLICY + VOICE_POLICY + CALL_END_POLICY,
+                'instructions': (PERSONA_PREFIX + self.system_prompt
+                                 + LANGUAGE_POLICY + VOICE_POLICY + CALL_END_POLICY),
                 'audio': audio_config,
                 'tools': [END_CALL_TOOL],
                 'tool_choice': 'auto',

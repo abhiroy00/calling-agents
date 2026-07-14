@@ -9,6 +9,8 @@ import asyncio
 import base64
 import json
 import logging
+import re
+import time
 
 from channels.db import database_sync_to_async
 from channels.generic.websocket import AsyncWebsocketConsumer
@@ -24,6 +26,13 @@ OUT_FRAME = 320
 OUT_CHUNK = 3200  # 200 ms — Exotel's minimum recommended chunk
 PCM_BYTES_PER_SEC = 16000  # 8 kHz * 16-bit mono
 
+# Fast-path hangup: if the caller's transcript contains a farewell, force-cut
+# the call shortly after, even if the model never calls its end_call tool.
+# Covers "bye", "bye bye", "thank you bye", "no thanks bye", बाय, अलविदा.
+FAREWELL_RE = re.compile(r'\b(bye+|good ?bye|बाय|अलविदा|टाटा)\b', re.IGNORECASE)
+# Long enough for the agent's ≤5-word goodbye, short enough to feel immediate.
+FORCE_HANGUP_AFTER = 2.0
+
 
 class ExotelMediaConsumer(AsyncWebsocketConsumer):
     async def connect(self):
@@ -32,10 +41,17 @@ class ExotelMediaConsumer(AsyncWebsocketConsumer):
         self.bridge = None
         self._out_buf = bytearray()
         self._resp_pcm = 0  # bytes sent to Exotel for the response in flight
+        self._resp_started_at = None  # monotonic time the first chunk was sent
         self._last_resp_seconds = 0.0
+        self._last_resp_started = None
+        self._closed = False
+        self._force_hangup_task = None
         await self.accept()
 
     async def disconnect(self, code):
+        self._closed = True
+        if self._force_hangup_task:
+            self._force_hangup_task.cancel()
         if self.bridge:
             await self.bridge.close()
 
@@ -104,22 +120,48 @@ class ExotelMediaConsumer(AsyncWebsocketConsumer):
             pad = (-len(pcm)) % OUT_FRAME
             await self._send_media(pcm + b'\x00' * pad)
         self._last_resp_seconds = self._resp_pcm / PCM_BYTES_PER_SEC
+        self._last_resp_started = self._resp_started_at
         self._resp_pcm = 0
+        self._resp_started_at = None
+
+    async def _close_stream(self):
+        """Close the Voicebot socket exactly once; Exotel then ends the call."""
+        if self._closed:
+            return
+        self._closed = True
+        try:
+            await self.close()
+        except Exception:
+            logger.warning('closing Voicebot stream failed', exc_info=True)
 
     async def _hangup(self):
         """The agent called end_call: let the goodbye finish playing, then
         close the stream, which makes Exotel end the call.
 
-        We push audio to Exotel faster than real time, so the whole goodbye is
-        already queued on their side — waiting its full duration is a safe
-        upper bound on the remaining playback.
+        We push audio to Exotel faster than real time, so playback lags what
+        we've sent. Exotel started playing roughly when we sent the first
+        chunk; whatever hasn't played yet is duration minus elapsed.
         """
-        await asyncio.sleep(self._last_resp_seconds + 0.5)
-        await self.close()
+        remaining = self._last_resp_seconds
+        if self._last_resp_started is not None:
+            remaining -= time.monotonic() - self._last_resp_started
+        await asyncio.sleep(max(0.0, remaining) + 0.3)
+        await self._close_stream()
+
+    async def _force_hangup(self):
+        """The caller said a farewell: cut the call after a short grace period
+        for the agent's goodbye, whether or not the model calls end_call."""
+        try:
+            await asyncio.sleep(FORCE_HANGUP_AFTER)
+        except asyncio.CancelledError:
+            return
+        logger.info('Force hangup after caller farewell (call_id=%s)', self.call_id)
+        await self._close_stream()
 
     async def _barge_in(self):
         self._out_buf.clear()
         self._resp_pcm = 0
+        self._resp_started_at = None
         if self.stream_sid:
             await self.send(text_data=json.dumps({
                 'event': 'clear',
@@ -134,10 +176,15 @@ class ExotelMediaConsumer(AsyncWebsocketConsumer):
             'role': role,
             'text': text,
         })
+        if (role == 'human' and FAREWELL_RE.search(text)
+                and self._force_hangup_task is None and not self._closed):
+            self._force_hangup_task = asyncio.create_task(self._force_hangup())
 
     # --- helpers ----------------------------------------------------------
 
     async def _send_media(self, pcm: bytes):
+        if self._resp_pcm == 0:
+            self._resp_started_at = time.monotonic()
         self._resp_pcm += len(pcm)
         await self.send(text_data=json.dumps({
             'event': 'media',
