@@ -11,13 +11,22 @@ const baseQuery = fetchBaseQuery({
   },
 });
 
+function isAuthEndpoint(args: string | FetchArgs): boolean {
+  const url = typeof args === "string" ? args : args.url;
+  return url.startsWith("/auth/login") || url.startsWith("/auth/refresh");
+}
+
 const baseQueryWithReauth: BaseQueryFn<string | FetchArgs, unknown, FetchBaseQueryError> = async (
   args,
   api,
   extraOptions,
 ) => {
   let result = await baseQuery(args, api, extraOptions);
-  if (result.error?.status === 401) {
+  // Never run the refresh dance for auth endpoints themselves — a bad-password
+  // 401 on /auth/login/ must be reported as-is. Otherwise a stale refresh
+  // token in storage would silently swap in another session and re-run the
+  // login request under it, producing intermittent, unpredictable results.
+  if (result.error?.status === 401 && !isAuthEndpoint(args)) {
     const state = api.getState() as { auth: { refresh: string | null; user: unknown } };
     const refresh = state.auth.refresh;
     if (refresh) {

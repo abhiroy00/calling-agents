@@ -35,11 +35,15 @@ function LoginPage() {
 
   // Single source of truth for post-login redirect (prevents double-navigate race).
   useEffect(() => {
-    if (token) navigate({ to: search.redirect ?? "/", replace: true });
+    if (token) navigate({ to: search.redirect ?? "/dashboard", replace: true });
   }, [token, search.redirect, navigate]);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
+    // Guard against accidental double-submits (Enter key repeats, double clicks,
+    // taps during the pending request). RTK Query dedupes identical in-flight
+    // mutations, but we still want to short-circuit before touching state.
+    if (isLoading) return;
     setLocalError(null);
     if (!form.email.trim() || !form.password) {
       setLocalError("Enter your email and password to continue.");
@@ -62,18 +66,42 @@ function LoginPage() {
     }
   }
 
-  const errMsg =
-    localError ||
-    (error as any)?.data?.non_field_errors?.[0] ||
-    (error as any)?.data?.detail ||
-    (error as any)?.data?.message ||
-    (error ? "Login failed — check your credentials" : null);
+  // Map the RTK Query error into a precise, user-facing message. Prefer any
+  // server-provided text (detail / non_field_errors / message) so operators
+  // see the exact reason; fall back to status-based copy so users never see
+  // the generic "Login failed" when we can be specific.
+  function messageForError(e: unknown): string | null {
+    if (!e) return null;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const err = e as any;
+    const serverMsg =
+      err?.data?.non_field_errors?.[0] ||
+      err?.data?.detail ||
+      err?.data?.message ||
+      (typeof err?.data === "string" ? err.data : null);
+    if (serverMsg) return String(serverMsg);
+    if (err?.status === "FETCH_ERROR")
+      return "Can't reach the server. Check your connection and try again.";
+    if (err?.status === "TIMEOUT_ERROR")
+      return "The server took too long to respond. Try again.";
+    if (err?.status === 400) return "Please check your email and password and try again.";
+    if (err?.status === 401 || err?.status === 403)
+      return "Incorrect email or password.";
+    if (err?.status === 429)
+      return "Too many attempts. Wait a moment before trying again.";
+    if (typeof err?.status === "number" && err.status >= 500)
+      return "Something went wrong on our end. Please try again.";
+    return "Login failed — check your credentials.";
+  }
+
+  const errMsg = localError || messageForError(error);
 
   function updateField(field: "email" | "password", value: string) {
     setForm((f) => ({ ...f, [field]: value }));
     if (localError) setLocalError(null);
     if (error) reset();
   }
+
 
 
   return (
@@ -141,7 +169,8 @@ function LoginPage() {
           </h2>
           <p className="mt-1 text-sm text-muted-foreground">Sign in to your ops console.</p>
 
-          <form onSubmit={handleSubmit} className="mt-8 space-y-4">
+          <form onSubmit={handleSubmit} noValidate className="mt-8 space-y-4">
+            <fieldset disabled={isLoading} className="space-y-4 disabled:opacity-90">
             <div>
               <label className="mb-1.5 block text-xs font-medium uppercase tracking-wider text-muted-foreground">
                 Email
@@ -152,9 +181,11 @@ function LoginPage() {
                   type="email"
                   required
                   autoComplete="email"
+                  aria-invalid={!!errMsg}
+                  aria-describedby={errMsg ? "login-error" : undefined}
                   value={form.email}
                   onChange={(e) => updateField("email", e.target.value)}
-                  className="w-full rounded-lg border border-border bg-surface/60 py-2.5 pl-9 pr-3 text-sm text-foreground placeholder:text-muted-foreground focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30"
+                  className="w-full rounded-lg border border-border bg-surface/60 py-2.5 pl-9 pr-3 text-sm text-foreground placeholder:text-muted-foreground focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 disabled:cursor-not-allowed"
                   placeholder="you@company.com"
                 />
               </div>
@@ -169,29 +200,41 @@ function LoginPage() {
                   type="password"
                   required
                   autoComplete="current-password"
+                  aria-invalid={!!errMsg}
+                  aria-describedby={errMsg ? "login-error" : undefined}
                   value={form.password}
                   onChange={(e) => updateField("password", e.target.value)}
-                  className="w-full rounded-lg border border-border bg-surface/60 py-2.5 pl-9 pr-3 text-sm text-foreground placeholder:text-muted-foreground focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30"
+                  className="w-full rounded-lg border border-border bg-surface/60 py-2.5 pl-9 pr-3 text-sm text-foreground placeholder:text-muted-foreground focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 disabled:cursor-not-allowed"
                   placeholder="••••••••"
                 />
               </div>
             </div>
 
-            {errMsg && (
-              <p className="rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-xs text-destructive">
-                {errMsg}
-              </p>
-            )}
+            <div
+              id="login-error"
+              role="alert"
+              aria-live="polite"
+              className={
+                errMsg
+                  ? "rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-xs text-destructive"
+                  : "sr-only"
+              }
+            >
+              {errMsg}
+            </div>
 
             <button
               type="submit"
               disabled={isLoading}
-              className="group relative inline-flex w-full items-center justify-center gap-2 overflow-hidden rounded-lg bg-primary py-2.5 text-sm font-semibold text-primary-foreground transition-all hover:bg-primary/90 disabled:opacity-60"
+              aria-busy={isLoading}
+              className="group relative inline-flex w-full items-center justify-center gap-2 overflow-hidden rounded-lg bg-primary py-2.5 text-sm font-semibold text-primary-foreground transition-all hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-60"
             >
               {isLoading && <Loader2 className="h-4 w-4 animate-spin" />}
               {isLoading ? "Signing in…" : "Sign in"}
             </button>
+            </fieldset>
           </form>
+
 
           <p className="mt-6 text-center text-xs text-muted-foreground">
             Trouble signing in? Contact your workspace admin.

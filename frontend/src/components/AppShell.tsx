@@ -20,13 +20,17 @@ import {
   Sparkles,
   Plus,
   Rocket,
+  CreditCard,
 } from "lucide-react";
 import { logout } from "@/features/auth/authSlice";
+import { resetBilling } from "@/features/billing/billingSlice";
 import type { RootState } from "@/app/store";
 import { cn } from "@/lib/utils";
+import UsageBadge from "@/components/UsageBadge";
+import OnboardingModal from "@/components/OnboardingModal";
 
 type NavItem = {
-  to: "/" | "/leads" | "/campaigns" | "/live" | "/dial" | "/history" | "/analytics";
+  to: "/dashboard" | "/leads" | "/campaigns" | "/live" | "/dial" | "/history" | "/analytics" | "/billing";
   label: string;
   icon: typeof LayoutDashboard;
   exact?: boolean;
@@ -39,7 +43,7 @@ const navSections: NavSection[] = [
   {
     label: "Workspace",
     items: [
-      { to: "/", label: "Home", icon: LayoutDashboard, exact: true },
+      { to: "/dashboard", label: "Home", icon: LayoutDashboard, exact: true },
       { to: "/leads", label: "Search", icon: Users },
       { to: "/campaigns", label: "Sequences", icon: Megaphone },
     ],
@@ -54,7 +58,10 @@ const navSections: NavSection[] = [
   },
   {
     label: "Insights",
-    items: [{ to: "/analytics", label: "Analytics", icon: BarChart3 }],
+    items: [
+      { to: "/analytics", label: "Analytics", icon: BarChart3 },
+      { to: "/billing", label: "Billing", icon: CreditCard },
+    ],
   },
 ];
 
@@ -194,11 +201,13 @@ export default function AppShell({ children }: { children: ReactNode }) {
 
   function handleLogout() {
     dispatch(logout());
+    dispatch(resetBilling());
     navigate({ to: "/login", replace: true });
   }
 
   return (
     <div className="flex min-h-screen w-full bg-surface">
+      <OnboardingModal />
       {/* Desktop sidebar */}
       <aside className="hidden w-64 shrink-0 lg:block">
         <div className="sticky top-0 h-screen">
@@ -266,6 +275,9 @@ export default function AppShell({ children }: { children: ReactNode }) {
                   ⌘K
                 </kbd>
               </div>
+
+              {/* Usage badge */}
+              <UsageBadge />
 
               {/* Agent status */}
               <div className="hidden items-center gap-1.5 rounded-full border border-success/25 bg-success/10 px-2.5 py-1 lg:flex">
