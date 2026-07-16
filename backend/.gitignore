@@ -53,3 +53,7 @@ coverage.xml
 # OS
 .DS_Store
 Thumbs.db
+
+# RAG knowledge base artifacts (rebuild with crawl_site + ingest_knowledge)
+chroma_db/
+knowledge_data/

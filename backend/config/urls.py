@@ -13,6 +13,7 @@ urlpatterns = [
     path('api/campaigns/', include('apps.campaigns.urls')),
     path('api/calls/', include('apps.calls.urls')),
     path('api/analytics/', include('apps.analytics.urls')),
+    path('api/knowledge/', include('apps.knowledge.urls')),
 
     # OpenAPI schema + interactive docs
     path('api/schema/', SpectacularAPIView.as_view(), name='schema'),

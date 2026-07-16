@@ -18,6 +18,7 @@ from django.utils import timezone
 
 from .ai_bridge import RealtimeBridge
 from .audio import pcm_to_ulaw, ulaw_to_pcm
+from .counselor_prompt import COUNSELOR_SYSTEM_PROMPT
 
 logger = logging.getLogger(__name__)
 
@@ -222,10 +223,7 @@ class ExotelMediaConsumer(AsyncWebsocketConsumer):
             return None
         return {
             'id': call.id,
-            'system_prompt': call.system_prompt or (
-                'You are a helpful AI assistant on a phone call. '
-                'Be concise and friendly. Keep responses under 2 sentences.'
-            ),
+            'system_prompt': call.system_prompt or COUNSELOR_SYSTEM_PROMPT,
             'lead_name': call.lead.name if call.lead else '',
         }
 

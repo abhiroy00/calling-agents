@@ -29,6 +29,7 @@ INSTALLED_APPS = [
     'apps.campaigns',
     'apps.calls',
     'apps.analytics',
+    'apps.knowledge',
 ]
 
 MIDDLEWARE = [
@@ -177,6 +178,13 @@ ELEVENLABS_API_KEY = config('ELEVENLABS_API_KEY', default='')
 ELEVENLABS_VOICE_ID = config('ELEVENLABS_VOICE_ID', default='OtEfb2LVzIE45wdYe54M')
 ELEVENLABS_MODEL = config('ELEVENLABS_MODEL', default='eleven_flash_v2_5')
 PUBLIC_HOST = config('PUBLIC_HOST', default='localhost:8000')
+
+# --- RAG knowledge base (website content -> ChromaDB) ---
+KNOWLEDGE_SITE_URL = config('KNOWLEDGE_SITE_URL', default='https://codingnowai.in/')
+KNOWLEDGE_DATA_DIR = BASE_DIR / 'knowledge_data'
+KNOWLEDGE_CHROMA_DIR = BASE_DIR / 'chroma_db'
+KNOWLEDGE_EMBEDDING_MODEL = config('KNOWLEDGE_EMBEDDING_MODEL',
+                                   default='text-embedding-3-small')
 
 # --- Email (post-call summaries & lead follow-ups) ---
 # With no EMAIL_HOST set, fall back to the console backend so dev never fails
