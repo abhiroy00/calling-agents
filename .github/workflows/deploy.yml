@@ -65,7 +65,21 @@ jobs:
       - name: Sync backend code to server
         run: |
           ssh server 'mkdir -p ~/app/backend'
-          rsync -az --delete --exclude '.env.docker' ./backend/ server:~/app/backend/
+          # --delete removes anything on the server that is not in the repo, so
+          # every gitignored path the app writes at runtime must be excluded or
+          # rsync tries to delete it. It cannot: compose bind-mounts . into /app
+          # and the containers run as root, so those files are root-owned while
+          # we sync as ec2-user (rsync then fails the whole deploy with code 23).
+          # Excluded paths are also protected from --delete.
+          rsync -az --delete \
+            --exclude '.env.docker' \
+            --exclude 'chroma_db/' \
+            --exclude 'knowledge_data/' \
+            --exclude 'staticfiles/' \
+            --exclude 'db.sqlite3*' \
+            --exclude '__pycache__/' \
+            --exclude '*.py[cod]' \
+            ./backend/ server:~/app/backend/
 
       - name: Write production env file
         run: |
