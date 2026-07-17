@@ -153,13 +153,27 @@ class ExotelMediaConsumer(AsyncWebsocketConsumer):
         # Placeholder names read terribly on a call ("Hello Unknown").
         if name.lower() in ('unknown', 'na', 'n/a', 'none', 'test'):
             name = ''
-        who = (f'You are calling {name} — greet them by name and confirm you '
-               'are speaking to them.') if name else (
-            'You do not know their name — ask who you are speaking to.')
-        return ('Say ONLY a natural one-sentence opener to start the call. '
-                f'{who} Introduce yourself and where you are calling from, '
-                'and ask if it is a good time to talk. Say NOTHING else — no '
-                'rules, no policies, no lists, no product pitch yet.')
+        # Exactly ONE question. Asking for the name AND for a good time in the
+        # same breath leaves the second one unanswered, and the model resolves
+        # that ambiguity by offering a callback to a caller who is right there
+        # willing to talk.
+        if name:
+            ask = (f'Greet {name} by name, then ask ONE question: whether now '
+                   'is a good time to talk.')
+        else:
+            ask = ('Then ask ONE question: who you are speaking to. Do NOT '
+                   'also ask whether it is a good time — that comes later.')
+        return (
+            'Open the call in one or two short sentences: introduce yourself, '
+            'name the company you are calling from exactly as the SCRIPT '
+            f'spells it, and say in a few words what it supplies. {ask} '
+            'Never say you are "an AI assistant" and never invent a company '
+            'name. Say NOTHING else — no rules, no lists, no product pitch.\n'
+            'CRITICAL: you are NOT here to book a callback. Do not mention a '
+            'callback, and do not ask when to call back, unless the caller '
+            'has CLEARLY said they cannot talk now. If their reply is '
+            'garbled, unclear, or just their name, ASSUME it is a good time '
+            'and carry on with the conversation.')
 
     # --- bridge callbacks -------------------------------------------------
 
