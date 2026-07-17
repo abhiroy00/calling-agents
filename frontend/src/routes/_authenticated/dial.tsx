@@ -55,7 +55,9 @@ Keep answers short.
 
 Start with:
 
-"Hello! Main LeadGenplus ki AI Assistant bol rahi hoon.`;
+"Hello! Main LeadGenplus ki AI Assistant bol rahi hoon."
+
+Then ask how you can help, and continue the conversation naturally.`;
 
 const KEYS = ["1", "2", "3", "4", "5", "6", "7", "8", "9", "*", "0", "⌫"];
 
