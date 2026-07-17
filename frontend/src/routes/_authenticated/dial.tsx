@@ -1,8 +1,8 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useRef, useState } from "react";
 import { useSelector } from "react-redux";
-import { PhoneCall, Delete, Loader2 } from "lucide-react";
-import { useManualDialMutation } from "@/features/calls/callsApi";
+import { PhoneCall, PhoneOff, Delete, Loader2 } from "lucide-react";
+import { useManualDialMutation, useEndCallMutation } from "@/features/calls/callsApi";
 import type { RootState } from "@/app/store";
 import { PageHeader } from "@/components/PageHeader";
 import { WS_URL } from "@/lib/constants";
@@ -62,7 +62,8 @@ Adapt naturally — this is a guide, not a script to read aloud.
 - Never quote or hint at prices, discounts, stock, or delivery timelines — even approximately, even if pushed. Say a senior representative will confirm.
 - Never promise anything your facts do not support.
 - Do not oversell or repeat yourself. Respect their time.
-- Mirror the caller's language (English / Hindi / Hinglish).`;
+- Mirror the caller's language (English / Hindi / Hinglish).
+- Say "Nevo Eon Diamonds", "WhatsApp", "Lab-Grown Diamonds" and "IGI" in English every time, even in the middle of a Hindi sentence. Never नेवो ऐऑन डायमंड्स, never व्हाट्सएप.`;
 
 const KEYS = ["1", "2", "3", "4", "5", "6", "7", "8", "9", "*", "0", "⌫"];
 
@@ -92,6 +93,8 @@ function DialPage() {
   const [disposition, setDisposition] = useState<string | null>(null);
   const token = useSelector((s: RootState) => s.auth.token);
   const [manualDial, { isLoading, error }] = useManualDialMutation();
+  const [endCall, { isLoading: isEnding }] = useEndCallMutation();
+  const [endError, setEndError] = useState<string | null>(null);
   const wsRef = useRef<WebSocket | null>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
 
@@ -119,11 +122,25 @@ function DialPage() {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [transcript]);
 
-  const canDial = !isLoading && (!callStatus || ["completed", "failed"].includes(callStatus));
+  const TERMINAL = ["completed", "failed", "busy", "no_answer"];
+  const canDial = !isLoading && (!callStatus || TERMINAL.includes(callStatus));
+  // Only offer End call once there is a call id to end and it is still live.
+  const isLive = !!callId && !!callStatus && !TERMINAL.includes(callStatus);
 
   function press(k: string) {
     if (k === "⌫") setPhone((p) => p.slice(0, -1));
     else setPhone((p) => p + k);
+  }
+
+  async function handleEnd() {
+    if (!callId) return;
+    setEndError(null);
+    try {
+      await endCall(callId).unwrap();
+      // Status stays as-is until Exotel's webhook confirms the real hangup.
+    } catch (e: any) {
+      setEndError(e?.data?.error || "Could not end the call — it may have already ended.");
+    }
   }
 
   async function handleDial() {
@@ -212,22 +229,43 @@ function DialPage() {
               className="mt-4 w-full rounded-lg border border-border bg-background/60 px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30"
             />
 
-            <button
-              onClick={handleDial}
-              disabled={!canDial || !phone.trim()}
-              className="mt-4 inline-flex w-full items-center justify-center gap-2 rounded-xl bg-primary py-3 text-sm font-semibold text-primary-foreground shadow-(--shadow-glow) transition-all hover:bg-primary/90 disabled:opacity-50"
-            >
-              {isLoading ? (
-                <Loader2 className="h-4 w-4 animate-spin" />
-              ) : (
-                <PhoneCall className="h-4 w-4" />
-              )}
-              {isLoading ? "Connecting…" : "Start call"}
-            </button>
+            {isLive ? (
+              <button
+                onClick={handleEnd}
+                disabled={isEnding}
+                className="mt-4 inline-flex w-full items-center justify-center gap-2 rounded-xl bg-destructive py-3 text-sm font-semibold text-destructive-foreground transition-all hover:bg-destructive/90 disabled:opacity-50"
+              >
+                {isEnding ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <PhoneOff className="h-4 w-4" />
+                )}
+                {isEnding ? "Ending…" : "End call"}
+              </button>
+            ) : (
+              <button
+                onClick={handleDial}
+                disabled={!canDial || !phone.trim()}
+                className="mt-4 inline-flex w-full items-center justify-center gap-2 rounded-xl bg-primary py-3 text-sm font-semibold text-primary-foreground shadow-(--shadow-glow) transition-all hover:bg-primary/90 disabled:opacity-50"
+              >
+                {isLoading ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <PhoneCall className="h-4 w-4" />
+                )}
+                {isLoading ? "Connecting…" : "Start call"}
+              </button>
+            )}
 
             {!!error && (
               <p className="mt-3 rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-xs text-destructive">
                 {(error as any)?.data?.error || "Call failed — check API & Twilio credentials."}
+              </p>
+            )}
+
+            {!!endError && (
+              <p className="mt-3 rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-xs text-destructive">
+                {endError}
               </p>
             )}
           </div>

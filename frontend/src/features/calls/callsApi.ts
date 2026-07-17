@@ -14,7 +14,16 @@ export const callsApi = baseApi.injectEndpoints({
       query: (body) => ({ url: "/calls/manual-dial/", method: "POST", body }),
       invalidatesTags: ["Call"],
     }),
+    endCall: build.mutation<{ call_id: string | number; status: string }, string | number>({
+      query: (id) => ({ url: `/calls/${id}/end/`, method: "POST" }),
+      invalidatesTags: (_r, _e, id) => [{ type: "Call", id }, "Call"],
+    }),
   }),
 });
 
-export const { useGetCallsQuery, useGetCallQuery, useManualDialMutation } = callsApi;
+export const {
+  useGetCallsQuery,
+  useGetCallQuery,
+  useManualDialMutation,
+  useEndCallMutation,
+} = callsApi;

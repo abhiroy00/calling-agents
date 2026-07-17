@@ -104,6 +104,55 @@ class StatusCallbackView(APIView):
         return HttpResponse('OK')
 
 
+class EndCallView(APIView):
+    """Hang up a live call from the dashboard.
+
+    Works by closing the Voicebot media stream, which is what makes Exotel end
+    the call — the same mechanism the agent's own end_call tool uses. The
+    consumer holding that stream may be in another process, so it is signalled
+    over the channel layer.
+
+    The call is NOT marked completed here: Exotel's status webhook fires on the
+    real hangup and owns disposition, duration and ended_at.
+    """
+    permission_classes = [IsAuthenticated]
+
+    TERMINAL = {'completed', 'failed', 'busy', 'no_answer'}
+
+    @extend_schema(
+        request=None,
+        responses=OpenApiResponse(OpenApiTypes.OBJECT,
+                                  description='Call id and the action taken.'),
+        summary='End a live call',
+    )
+    def post(self, request, pk):
+        from .media_consumer import call_group
+
+        try:
+            call = Call.objects.get(pk=pk)
+        except Call.DoesNotExist:
+            return Response({'error': 'call not found'},
+                            status=status.HTTP_404_NOT_FOUND)
+
+        if call.status in self.TERMINAL:
+            return Response({'call_id': pk, 'status': call.status,
+                             'detail': 'call already ended'})
+
+        try:
+            channel_layer = get_channel_layer()
+            async_to_sync(channel_layer.group_send)(
+                call_group(pk), {'type': 'call.hangup'})
+        except Exception as exc:
+            return Response({'error': f'could not signal the call: {exc}'},
+                            status=status.HTTP_502_BAD_GATEWAY)
+
+        # group_send to a group with no members is a no-op, so this is also the
+        # response when the call is still ringing and has no media stream yet.
+        _broadcast({'type': 'call.status', 'call_id': pk, 'status': 'ending'})
+        return Response({'call_id': pk, 'status': 'ending'},
+                        status=status.HTTP_202_ACCEPTED)
+
+
 class ManualDialView(APIView):
     permission_classes = [IsAuthenticated]
 
@@ -124,7 +173,9 @@ class ManualDialView(APIView):
         from .exotel_client import dial
 
         phone = request.data.get('phone', '').strip()
-        name = request.data.get('name', '').strip() or 'Unknown'
+        # Left blank when not supplied — never the literal 'Unknown', which the
+        # agent would greet as a person's name ("Hello Unknown, ...").
+        name = request.data.get('name', '').strip()
         system_prompt = request.data.get('system_prompt', '').strip()
 
         if not phone:
@@ -141,7 +192,10 @@ class ManualDialView(APIView):
         call = Call.objects.create(
             lead=lead,
             campaign=None,
-            system_prompt=system_prompt or 'You are a helpful AI assistant on a phone call. Be concise and friendly.',
+            # Left blank on purpose when not supplied: the media consumer then
+            # falls back to NEVO_SYSTEM_PROMPT. A generic default here would
+            # silently win over it and strip the agent of its persona.
+            system_prompt=system_prompt,
             status='initiated',
         )
 

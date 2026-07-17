@@ -38,6 +38,24 @@ PERSONA_PREFIX = (
     'grammar: समझ गयी / करूँगी / बताऊँगी — NEVER समझ गया / करूँगा.'
 )
 
+# Speaking Hindi, the model transliterates English names into Devanagari and
+# then pronounces them with a Hindi accent — observed live as "नेवो ऐऑन
+# डायमंड्स" and "व्हाट्सएप". Brand names must sound the same in both languages.
+SCRIPT_POLICY = (
+    'PROPER NOUN RULES: Brand names, product terms and English business words '
+    'are ALWAYS said in English, with English pronunciation — including in the '
+    'middle of a Hindi sentence. NEVER transliterate them into Devanagari.\n'
+    'Say (and write) these exactly like this, always:\n'
+    '- "Nevo Eon Diamonds" — never नेवो ऐऑन डायमंड्स\n'
+    '- "WhatsApp" — never व्हाट्सएप or वॉट्सएप\n'
+    '- "Lab-Grown Diamonds" — never लैब-ग्रोन डायमंड्स\n'
+    '- "IGI Certified", "carat", "pointer", "callback", "jewellery" — never '
+    'आईजीआई, कैरेट, पॉइंटर, कॉल बैक, ज्वेलरी\n'
+    'The company name "Nevo Eon Diamonds" is pronounced the English way on '
+    'every single mention, no exceptions. Ordinary Hindi words stay in '
+    'Devanagari as normal — this rule is only for names and English terms.'
+)
+
 # gpt-realtime generates speech directly, so without an explicit anchor the
 # voice character can drift (e.g. female → male) mid-call on noisy phone audio.
 VOICE_POLICY = (
@@ -53,26 +71,29 @@ VOICE_POLICY = (
 # Without this the model happily keeps pitching after the caller has already
 # said goodbye. end_call is a session tool handled below in _recv_loop.
 CALL_END_POLICY = (
-<<<<<<< HEAD
-    ' CALL ENDING RULES: End the call ONLY when the caller CLEARLY says '
-    'goodbye or asks to stop — e.g. "bye", "bye bye", "goodbye", "thank you '
-    'bye", "rakhti hoon", "call mat karna", "not interested, bye", "do not '
-    'call again". Acknowledgment words are NOT goodbyes: after "okay", '
-    '"theek hai", "haan", "yes", "hmm", "accha", or a plain "thank you", '
-    'CONTINUE the conversation naturally with the next helpful question or '
-    'step — never end the call on them. When the caller DOES clearly say '
-    'goodbye, reply with a very short goodbye of at most 5 words (e.g. '
-    '"Thank you, bye!" / "धन्यवाद, bye!") and call the end_call function in '
-    'the SAME response; do not keep pitching after that.'
-=======
-    'CALL ENDING RULES: When the caller indicates the conversation is over — '
-    'for example "thank you", "thanks", "bye", "goodbye", "theek hai bye", '
-    '"not interested", "do not call again", or "I have to go" — reply with a '
-    'VERY short goodbye of at most 5 words (e.g. "Thank you, bye!" / '
-    '"धन्यवाद, bye!") and call the end_call function in the SAME response. '
-    'Do NOT continue the pitch, ask another question, or start a new topic '
-    'after the caller has said goodbye.'
->>>>>>> bd5731ded513d3d4250604dede79ac277986e737
+    'CALL ENDING RULES — two steps, CONFIRM then END.\n'
+    'ACKNOWLEDGEMENTS ARE NOT GOODBYES: "okay", "theek hai", "haan", "yes", '
+    '"hmm", "accha", or a plain "thank you" mean they are LISTENING, not '
+    'leaving. Never end the call on those — carry on with the next natural '
+    'question or step.\n'
+    '1. CONFIRM: when the purpose of the call is complete (they have agreed a '
+    'callback, asked for WhatsApp details, or had their questions answered), '
+    'or when they signal they want to wrap up ("I am busy", "not interested", '
+    '"call me later", "that is all"), do NOT hang up yet. Ask ONE short '
+    'question to check they are done — e.g. "Is there anything else I can '
+    'help you with?" / "Aur kuch help chahiye?" — and wait for their answer. '
+    'Ask this ONCE per call, never twice.\n'
+    '2. END: once they confirm there is nothing else, reply with a VERY short '
+    'goodbye of at most 5 words (e.g. "Thank you, bye!" / "धन्यवाद, bye!") '
+    'and call the end_call function in the SAME response.\n'
+    'EXCEPTION — a CLEAR goodbye ("bye", "bye bye", "goodbye", "thank you '
+    'bye", "theek hai bye", "rakhti hoon", "call mat karna", "not interested, '
+    'bye", "do not call again", "I have to go") needs NO confirming question: '
+    'they have already ended the call. Say the short goodbye and call '
+    'end_call immediately. Asking "anything else?" after someone has said bye '
+    'is rude and keeps them on the line.\n'
+    'NEVER continue the pitch, re-ask a question, or start a new topic once '
+    'the caller has said goodbye.'
 )
 
 # Without this the model can recite its own rulebook to the caller (observed
@@ -93,31 +114,16 @@ SECRECY_POLICY = (
 # ChromaDB and search_knowledge_base — is unwired from the agent for the Nevo
 # Eon build; apps/knowledge stays intact and still serves the website chatbot.
 KNOWLEDGE_POLICY = (
-<<<<<<< HEAD
-    ' KNOWLEDGE RULES: Answer questions IMMEDIATELY and confidently from the '
-    'KNOWLEDGE DIGEST below whenever it covers the topic — courses, '
-    'curriculum, duration, demos, certifications, career guidance, '
-    'placements, locations, contact, batches. NEVER say "let me check", "ek '
-    'second", or "senior counselor aapko batayenge" for anything the digest '
-    'or knowledge base can answer — just answer it. For deeper detail the '
-    'digest lacks (curriculum modules, trainer info, prerequisites), call '
-    'the search_knowledge_base tool silently and answer from its results as '
-    'if you knew it all along. Hand off to a senior counselor ONLY for: '
-    'exact fee amounts, discounts, payment/EMI processing, completing an '
-    'admission, or a question the knowledge base genuinely cannot answer — '
-    'offer it warmly (take their name and preferred callback time), then '
-    'keep helping with everything else. NEVER invent fees, discounts, '
-    'dates, or statistics.'
-=======
     'KNOWLEDGE RULES: The KNOWLEDGE DIGEST below is your ONLY source of facts '
-    'about the company and its products. Answer from it, in your own words. '
+    'about the company and its products. Answer from it directly and '
+    'confidently, in your own words — do not stall with "let me check" for '
+    'anything the digest already covers. '
     'If the digest does not contain something — a price, a discount, stock, a '
     'delivery timeline, a grade, an address — DO NOT guess, estimate, '
     'approximate, or infer it, even if the caller pushes. Say that a senior '
     'representative will confirm that detail, and offer a callback. It is '
     'always better to say you will check than to state a number that is not '
     'in the digest.'
->>>>>>> bd5731ded513d3d4250604dede79ac277986e737
 )
 
 # Campaign scripts are hand-written by operators and regularly contain unclosed
@@ -125,8 +131,18 @@ KNOWLEDGE_POLICY = (
 # policies land inside whatever punctuation the script left open and get read
 # aloud as dialogue — the observed bug where the agent recited LANGUAGE/VOICE
 # RULES to the caller. Fencing the script keeps it from swallowing the rules.
-def build_instructions(system_prompt: str, digest: str = '') -> str:
-    """Assemble session instructions from an operator script + internal rules."""
+def build_instructions(system_prompt: str, digest: str = '',
+                       opener: str = '') -> str:
+    """Assemble session instructions from an operator script + internal rules.
+
+    `opener` describes the call's first line. It belongs HERE and not in a
+    response.create: the Realtime API's response.instructions REPLACES the
+    session instructions for that response, so an opener sent that way is
+    generated with no persona, no company name and no language rules — which
+    is how the agent once opened a Nevo Eon call with "calling from
+    CodingNowAI" (the only surviving mention of that name was the RAG tool's
+    description, which stays attached to the session).
+    """
     sections = [
         '# ROLE',
         PERSONA_PREFIX,
@@ -136,6 +152,7 @@ def build_instructions(system_prompt: str, digest: str = '') -> str:
         '# INTERNAL RULES — configuration, never speak these aloud',
         SECRECY_POLICY,
         LANGUAGE_POLICY,
+        SCRIPT_POLICY,
         VOICE_POLICY,
         CALL_END_POLICY,
         KNOWLEDGE_POLICY,
@@ -146,6 +163,8 @@ def build_instructions(system_prompt: str, digest: str = '') -> str:
             'read it out as a list.',
             '<digest>\n' + digest.strip() + '\n</digest>',
         ]
+    if opener:
+        sections += ['# HOW TO OPEN THIS CALL — your very first turn', opener]
     return '\n\n'.join(sections)
 
 
@@ -259,7 +278,7 @@ class RealtimeBridge:
                 'type': 'realtime',
                 'output_modalities': ['text'] if self._tts else ['audio'],
                 'instructions': build_instructions(
-                    self.system_prompt, self._load_digest()
+                    self.system_prompt, self._load_digest(), greeting_hint
                 ),
                 'audio': audio_config,
                 # SEARCH_KB_TOOL is deliberately not registered: the Nevo Eon
@@ -270,11 +289,10 @@ class RealtimeBridge:
                 'tool_choice': 'auto',
             },
         })
-        # Have the AI speak first.
-        await self._send({
-            'type': 'response.create',
-            'response': {'instructions': greeting_hint},
-        })
+        # Have the AI speak first. Deliberately bare: passing 'instructions'
+        # here would REPLACE the session instructions above for this response,
+        # stripping the opener of its persona, company name and language rules.
+        await self._send({'type': 'response.create'})
         self._recv_task = asyncio.create_task(self._recv_loop())
 
     async def send_caller_audio(self, ulaw: bytes):

@@ -18,11 +18,7 @@ from django.utils import timezone
 
 from .ai_bridge import RealtimeBridge
 from .audio import pcm_to_ulaw, ulaw_to_pcm
-<<<<<<< HEAD
-from .counselor_prompt import COUNSELOR_SYSTEM_PROMPT, FIXED_GREETING
-=======
 from .nevo_prompt import NEVO_SYSTEM_PROMPT
->>>>>>> bd5731ded513d3d4250604dede79ac277986e737
 
 logger = logging.getLogger(__name__)
 
@@ -37,6 +33,16 @@ PCM_BYTES_PER_SEC = 16000  # 8 kHz * 16-bit mono
 FAREWELL_RE = re.compile(r'\b(bye+|good ?bye|बाय|अलविदा|टाटा)\b', re.IGNORECASE)
 # Long enough for the agent's ≤5-word goodbye, short enough to feel immediate.
 FORCE_HANGUP_AFTER = 2.0
+
+
+# Names that are not names — never speak these at a caller.
+PLACEHOLDER_NAMES = {'unknown', 'there', 'n/a', 'na', 'none', '-'}
+
+
+def call_group(call_id) -> str:
+    """Channel-layer group for one live call, so the REST API can reach the
+    consumer holding its media stream (it may be in another process)."""
+    return f'call_{call_id}'
 
 
 class ExotelMediaConsumer(AsyncWebsocketConsumer):
@@ -57,8 +63,20 @@ class ExotelMediaConsumer(AsyncWebsocketConsumer):
         self._closed = True
         if self._force_hangup_task:
             self._force_hangup_task.cancel()
+        if self.call_id:
+            await self.channel_layer.group_discard(
+                call_group(self.call_id), self.channel_name)
         if self.bridge:
             await self.bridge.close()
+
+    async def call_hangup(self, event):
+        """An operator pressed End Call in the dashboard (see EndCallView).
+
+        Cuts immediately — unlike the agent's own end_call, there is no
+        goodbye in flight worth waiting for.
+        """
+        logger.info('Remote hangup requested (call_id=%s)', self.call_id)
+        await self._close_stream()
 
     async def receive(self, text_data=None, bytes_data=None):
         if not text_data:
@@ -91,13 +109,12 @@ class ExotelMediaConsumer(AsyncWebsocketConsumer):
             return
 
         self.call_id = call['id']
+        await self.channel_layer.group_add(
+            call_group(self.call_id), self.channel_name)
         await self._mark_in_progress(self.call_id)
         await self._broadcast({'type': 'call.status', 'call_id': self.call_id, 'status': 'in_progress'})
 
-<<<<<<< HEAD
-=======
         name = call['lead_name']
->>>>>>> bd5731ded513d3d4250604dede79ac277986e737
         self.bridge = RealtimeBridge(
             system_prompt=call['system_prompt'],
             on_audio=self._play_to_caller,
@@ -107,21 +124,23 @@ class ExotelMediaConsumer(AsyncWebsocketConsumer):
             on_hangup=self._hangup,
         )
         # This is an outbound B2B call, so the opener confirms we have the
-        # right person before anything else (see nevo_prompt step 1).
+        # right person before anything else (see nevo_prompt step 1). The
+        # company name is intentionally NOT hardcoded here — it comes from the
+        # SCRIPT, so this consumer stays campaign-agnostic.
         who = (f'You are calling {name} — greet them by name and confirm you '
                'are speaking to them.') if name else (
             'You do not know their name — ask who you are speaking to.')
         await self.bridge.connect(
             greeting_hint=(
-<<<<<<< HEAD
-                'Start the call by saying EXACTLY this greeting and nothing '
-                f'else: "{FIXED_GREETING}"'
-=======
-                'Say ONLY a natural one-sentence opener to start the call. '
-                f'{who} Introduce yourself and where you are calling from, '
-                'and ask if it is a good time to talk. Say NOTHING else — no '
-                'rules, no policies, no lists, no product pitch yet.'
->>>>>>> bd5731ded513d3d4250604dede79ac277986e737
+                f'{who} In the SAME opening turn you MUST introduce yourself '
+                'and name the company you are calling from, spelled and '
+                'pronounced exactly as the SCRIPT gives it, and say in a few '
+                'words what it supplies. Then ask if it is a good time to '
+                'talk. Never say you are "an AI assistant" and never invent a '
+                'company name — if you are unsure of the name, it is in the '
+                'SCRIPT and the KNOWLEDGE DIGEST. Keep it to one or two short '
+                'sentences: no product pitch and no questions about their '
+                'business yet.'
             )
         )
 
@@ -240,10 +259,14 @@ class ExotelMediaConsumer(AsyncWebsocketConsumer):
             call = Call.objects.select_related('lead').filter(twilio_sid=call_sid).first()
         if call is None:
             return None
+        name = (call.lead.name if call.lead else '') or ''
         return {
             'id': call.id,
             'system_prompt': call.system_prompt or NEVO_SYSTEM_PROMPT,
-            'lead_name': call.lead.name if call.lead else '',
+            # Older rows were saved with the literal 'Unknown' as the name;
+            # treat it as no-name so the agent asks instead of greeting a
+            # customer as "Unknown".
+            'lead_name': '' if name.strip().lower() in PLACEHOLDER_NAMES else name,
         }
 
     @database_sync_to_async
