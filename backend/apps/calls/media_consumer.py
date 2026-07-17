@@ -16,8 +16,11 @@ from channels.db import database_sync_to_async
 from channels.generic.websocket import AsyncWebsocketConsumer
 from django.utils import timezone
 
+from django.conf import settings
+
 from .ai_bridge import RealtimeBridge
 from .audio import pcm_to_ulaw, ulaw_to_pcm
+from .counselor_prompt import COUNSELOR_SYSTEM_PROMPT, FIXED_GREETING
 from .nevo_prompt import NEVO_SYSTEM_PROMPT
 
 logger = logging.getLogger(__name__)
@@ -114,7 +117,6 @@ class ExotelMediaConsumer(AsyncWebsocketConsumer):
         await self._mark_in_progress(self.call_id)
         await self._broadcast({'type': 'call.status', 'call_id': self.call_id, 'status': 'in_progress'})
 
-        name = call['lead_name']
         self.bridge = RealtimeBridge(
             system_prompt=call['system_prompt'],
             on_audio=self._play_to_caller,
@@ -123,26 +125,27 @@ class ExotelMediaConsumer(AsyncWebsocketConsumer):
             on_interrupt=self._barge_in,
             on_hangup=self._hangup,
         )
-        # This is an outbound B2B call, so the opener confirms we have the
-        # right person before anything else (see nevo_prompt step 1). The
-        # company name is intentionally NOT hardcoded here — it comes from the
-        # SCRIPT, so this consumer stays campaign-agnostic.
+        await self.bridge.connect(greeting_hint=self._greeting_hint(call))
+
+    @staticmethod
+    def _greeting_hint(call) -> str:
+        """Per-profile opener. CodingNowAI uses a fixed scripted greeting;
+        Nevo is an outbound B2B call, so the opener confirms we have the
+        right person before anything else (see nevo_prompt step 1)."""
+        if settings.AGENT_PROFILE == 'codingnowai':
+            return ('Start the call by saying EXACTLY this greeting and '
+                    f'nothing else: "{FIXED_GREETING}"')
+        name = (call['lead_name'] or '').strip()
+        # Placeholder names read terribly on a call ("Hello Unknown").
+        if name.lower() in ('unknown', 'na', 'n/a', 'none', 'test'):
+            name = ''
         who = (f'You are calling {name} — greet them by name and confirm you '
                'are speaking to them.') if name else (
             'You do not know their name — ask who you are speaking to.')
-        await self.bridge.connect(
-            greeting_hint=(
-                f'{who} In the SAME opening turn you MUST introduce yourself '
-                'and name the company you are calling from, spelled and '
-                'pronounced exactly as the SCRIPT gives it, and say in a few '
-                'words what it supplies. Then ask if it is a good time to '
-                'talk. Never say you are "an AI assistant" and never invent a '
-                'company name — if you are unsure of the name, it is in the '
-                'SCRIPT and the KNOWLEDGE DIGEST. Keep it to one or two short '
-                'sentences: no product pitch and no questions about their '
-                'business yet.'
-            )
-        )
+        return ('Say ONLY a natural one-sentence opener to start the call. '
+                f'{who} Introduce yourself and where you are calling from, '
+                'and ask if it is a good time to talk. Say NOTHING else — no '
+                'rules, no policies, no lists, no product pitch yet.')
 
     # --- bridge callbacks -------------------------------------------------
 
@@ -262,10 +265,11 @@ class ExotelMediaConsumer(AsyncWebsocketConsumer):
         name = (call.lead.name if call.lead else '') or ''
         return {
             'id': call.id,
-            'system_prompt': call.system_prompt or NEVO_SYSTEM_PROMPT,
-            # Older rows were saved with the literal 'Unknown' as the name;
-            # treat it as no-name so the agent asks instead of greeting a
-            # customer as "Unknown".
+'system_prompt': call.system_prompt or (
+                COUNSELOR_SYSTEM_PROMPT
+                if settings.AGENT_PROFILE == 'codingnowai'
+                else NEVO_SYSTEM_PROMPT
+            ),
             'lead_name': '' if name.strip().lower() in PLACEHOLDER_NAMES else name,
         }
 
