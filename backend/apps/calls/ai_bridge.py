@@ -53,13 +53,16 @@ VOICE_POLICY = (
 # Without this the model happily keeps pitching after the caller has already
 # said goodbye. end_call is a session tool handled below in _recv_loop.
 CALL_END_POLICY = (
-    ' CALL ENDING RULES: When the caller indicates the conversation is over — '
-    'for example "thank you", "thanks", "bye", "goodbye", "theek hai bye", '
-    '"not interested", "do not call again", or "I have to go" — reply with a '
-    'VERY short goodbye of at most 5 words (e.g. "Thank you, bye!" / '
-    '"धन्यवाद, bye!") and call the end_call function in the SAME response. '
-    'Do NOT continue the pitch, ask another question, or start a new topic '
-    'after the caller has said goodbye.'
+    ' CALL ENDING RULES: End the call ONLY when the caller CLEARLY says '
+    'goodbye or asks to stop — e.g. "bye", "bye bye", "goodbye", "thank you '
+    'bye", "rakhti hoon", "call mat karna", "not interested, bye", "do not '
+    'call again". Acknowledgment words are NOT goodbyes: after "okay", '
+    '"theek hai", "haan", "yes", "hmm", "accha", or a plain "thank you", '
+    'CONTINUE the conversation naturally with the next helpful question or '
+    'step — never end the call on them. When the caller DOES clearly say '
+    'goodbye, reply with a very short goodbye of at most 5 words (e.g. '
+    '"Thank you, bye!" / "धन्यवाद, bye!") and call the end_call function in '
+    'the SAME response; do not keep pitching after that.'
 )
 
 # Without this the model can recite its own rulebook to the caller (observed
@@ -74,17 +77,20 @@ SECRECY_POLICY = (
 
 # Grounding rules: all facts must come from the digest or the RAG tool.
 KNOWLEDGE_POLICY = (
-    ' KNOWLEDGE RULES: You have a search_knowledge_base tool that searches '
-    'the official CodingNowAI website content. For ANY factual claim about '
-    'courses, curriculum, fees, batches, trainers, projects, placements, '
-    'certifications, locations, or enrollment: answer from the KNOWLEDGE '
-    'DIGEST below if it covers it; otherwise CALL search_knowledge_base '
-    'BEFORE answering — say a short natural filler first (e.g. "ek second, '
-    'main check karti hoon"). If neither the digest nor the search results '
-    'contain the answer, DO NOT guess or invent anything — say a senior '
-    'counselor will confirm that detail and offer a callback. NEVER state '
-    'fees, discounts, dates, or statistics that are not in the digest or '
-    'search results.'
+    ' KNOWLEDGE RULES: Answer questions IMMEDIATELY and confidently from the '
+    'KNOWLEDGE DIGEST below whenever it covers the topic — courses, '
+    'curriculum, duration, demos, certifications, career guidance, '
+    'placements, locations, contact, batches. NEVER say "let me check", "ek '
+    'second", or "senior counselor aapko batayenge" for anything the digest '
+    'or knowledge base can answer — just answer it. For deeper detail the '
+    'digest lacks (curriculum modules, trainer info, prerequisites), call '
+    'the search_knowledge_base tool silently and answer from its results as '
+    'if you knew it all along. Hand off to a senior counselor ONLY for: '
+    'exact fee amounts, discounts, payment/EMI processing, completing an '
+    'admission, or a question the knowledge base genuinely cannot answer — '
+    'offer it warmly (take their name and preferred callback time), then '
+    'keep helping with everything else. NEVER invent fees, discounts, '
+    'dates, or statistics.'
 )
 
 SEARCH_KB_TOOL = {

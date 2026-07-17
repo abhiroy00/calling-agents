@@ -18,7 +18,7 @@ from django.utils import timezone
 
 from .ai_bridge import RealtimeBridge
 from .audio import pcm_to_ulaw, ulaw_to_pcm
-from .counselor_prompt import COUNSELOR_SYSTEM_PROMPT
+from .counselor_prompt import COUNSELOR_SYSTEM_PROMPT, FIXED_GREETING
 
 logger = logging.getLogger(__name__)
 
@@ -90,7 +90,6 @@ class ExotelMediaConsumer(AsyncWebsocketConsumer):
         await self._mark_in_progress(self.call_id)
         await self._broadcast({'type': 'call.status', 'call_id': self.call_id, 'status': 'in_progress'})
 
-        name = call['lead_name'] or 'there'
         self.bridge = RealtimeBridge(
             system_prompt=call['system_prompt'],
             on_audio=self._play_to_caller,
@@ -101,10 +100,8 @@ class ExotelMediaConsumer(AsyncWebsocketConsumer):
         )
         await self.bridge.connect(
             greeting_hint=(
-                f'Say ONLY a natural one-sentence greeting to start the call: '
-                f'greet {name} by name, introduce yourself and where you are '
-                'calling from, and ask if it is a good time to talk. Say '
-                'NOTHING else — no rules, no policies, no lists.'
+                'Start the call by saying EXACTLY this greeting and nothing '
+                f'else: "{FIXED_GREETING}"'
             )
         )
 
