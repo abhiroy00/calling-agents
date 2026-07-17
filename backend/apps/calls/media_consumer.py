@@ -18,7 +18,7 @@ from django.utils import timezone
 
 from .ai_bridge import RealtimeBridge
 from .audio import pcm_to_ulaw, ulaw_to_pcm
-from .counselor_prompt import COUNSELOR_SYSTEM_PROMPT
+from .nevo_prompt import NEVO_SYSTEM_PROMPT
 
 logger = logging.getLogger(__name__)
 
@@ -90,7 +90,7 @@ class ExotelMediaConsumer(AsyncWebsocketConsumer):
         await self._mark_in_progress(self.call_id)
         await self._broadcast({'type': 'call.status', 'call_id': self.call_id, 'status': 'in_progress'})
 
-        name = call['lead_name'] or 'there'
+        name = call['lead_name']
         self.bridge = RealtimeBridge(
             system_prompt=call['system_prompt'],
             on_audio=self._play_to_caller,
@@ -99,12 +99,17 @@ class ExotelMediaConsumer(AsyncWebsocketConsumer):
             on_interrupt=self._barge_in,
             on_hangup=self._hangup,
         )
+        # This is an outbound B2B call, so the opener confirms we have the
+        # right person before anything else (see nevo_prompt step 1).
+        who = (f'You are calling {name} — greet them by name and confirm you '
+               'are speaking to them.') if name else (
+            'You do not know their name — ask who you are speaking to.')
         await self.bridge.connect(
             greeting_hint=(
-                f'Say ONLY a natural one-sentence greeting to start the call: '
-                f'greet {name} by name, introduce yourself and where you are '
-                'calling from, and ask if it is a good time to talk. Say '
-                'NOTHING else — no rules, no policies, no lists.'
+                'Say ONLY a natural one-sentence opener to start the call. '
+                f'{who} Introduce yourself and where you are calling from, '
+                'and ask if it is a good time to talk. Say NOTHING else — no '
+                'rules, no policies, no lists, no product pitch yet.'
             )
         )
 
@@ -225,7 +230,7 @@ class ExotelMediaConsumer(AsyncWebsocketConsumer):
             return None
         return {
             'id': call.id,
-            'system_prompt': call.system_prompt or COUNSELOR_SYSTEM_PROMPT,
+            'system_prompt': call.system_prompt or NEVO_SYSTEM_PROMPT,
             'lead_name': call.lead.name if call.lead else '',
         }
 
