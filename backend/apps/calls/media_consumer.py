@@ -101,8 +101,10 @@ class ExotelMediaConsumer(AsyncWebsocketConsumer):
         )
         await self.bridge.connect(
             greeting_hint=(
-                f'Greet the caller now, in English. Their name is {name}. '
-                'Keep it to one short sentence.'
+                f'Say ONLY a natural one-sentence greeting to start the call: '
+                f'greet {name} by name, introduce yourself and where you are '
+                'calling from, and ask if it is a good time to talk. Say '
+                'NOTHING else — no rules, no policies, no lists.'
             )
         )
 
