@@ -41,6 +41,9 @@ FORCE_HANGUP_AFTER = 2.0
 # Names that are not names — never speak these at a caller.
 PLACEHOLDER_NAMES = {'unknown', 'there', 'n/a', 'na', 'none', '-'}
 
+# Statuses the status webhook owns; never overwrite one of these.
+TERMINAL_STATUSES = {'completed', 'failed', 'busy', 'no_answer'}
+
 
 def call_group(call_id) -> str:
     """Channel-layer group for one live call, so the REST API can reach the
@@ -67,8 +70,19 @@ class ExotelMediaConsumer(AsyncWebsocketConsumer):
         if self._force_hangup_task:
             self._force_hangup_task.cancel()
         if self.call_id:
+            # The media stream ending means the call is over, however it ended
+            # (caller hung up, agent's end_call, End call button). Exotel's
+            # status webhook owns the disposition, but it can be slow or never
+            # arrive at all if PUBLIC_HOST is unreachable — and until some
+            # terminal status reaches the dashboard, the UI still thinks the
+            # call is live and keeps offering End call on a dead line.
             await self.channel_layer.group_discard(
                 call_group(self.call_id), self.channel_name)
+            status = await self._mark_ended(self.call_id)
+            if status:
+                await self._broadcast({'type': 'call.status',
+                                       'call_id': self.call_id,
+                                       'status': status})
         if self.bridge:
             await self.bridge.close()
 
@@ -277,6 +291,27 @@ class ExotelMediaConsumer(AsyncWebsocketConsumer):
     def _mark_in_progress(self, call_id):
         from .models import Call
         Call.objects.filter(pk=call_id).update(status='in_progress', started_at=timezone.now())
+
+    @database_sync_to_async
+    def _mark_ended(self, call_id):
+        """Mark a call completed when its media stream ends.
+
+        Returns the status to broadcast, or None if the call already reached a
+        terminal state — the webhook may have beaten us here, and it carries
+        the real disposition, so it must never be overwritten.
+        """
+        from .models import Call
+
+        call = Call.objects.filter(pk=call_id).first()
+        if call is None or call.status in TERMINAL_STATUSES:
+            return None
+        now = timezone.now()
+        Call.objects.filter(pk=call_id).update(
+            status='completed',
+            ended_at=now,
+            duration=int((now - call.started_at).total_seconds()) if call.started_at else 0,
+        )
+        return 'completed'
 
     @database_sync_to_async
     def _create_transcript(self, call_id, role, text):

@@ -262,9 +262,15 @@ class RealtimeBridge:
                 },
                 'transcription': {
                     'model': 'gpt-4o-mini-transcribe',
-                    # Steers language autodetection on noisy phone audio
-                    'prompt': 'Phone call in English and Hindi (Hinglish). '
-                              'Transcribe Hindi in Devanagari script.',
+                    # Steers language autodetection on noisy phone audio. The
+                    # Urdu/Arabic clause is not theoretical: noisy Hindi audio
+                    # has come back as "پرسائڈ کیب گیم بات کر سکتا ہے", which
+                    # the agent then acted on as if it were a real answer.
+                    'prompt': 'Phone call in English and Hindi (Hinglish) '
+                              'between a diamond supplier and a jeweller. '
+                              'Transcribe Hindi in Devanagari script and '
+                              'English in Latin script. NEVER transcribe in '
+                              'Urdu, Arabic, or any other script.',
                 },
             },
         }
