@@ -53,8 +53,7 @@ VOICE_POLICY = (
 # Without this the model happily keeps pitching after the caller has already
 # said goodbye. end_call is a session tool handled below in _recv_loop.
 CALL_END_POLICY = (
-<<<<<<< HEAD
-    ' CALL ENDING RULES: End the call ONLY when the caller CLEARLY says '
+    'CALL ENDING RULES: End the call ONLY when the caller CLEARLY says '
     'goodbye or asks to stop — e.g. "bye", "bye bye", "goodbye", "thank you '
     'bye", "rakhti hoon", "call mat karna", "not interested, bye", "do not '
     'call again". Acknowledgment words are NOT goodbyes: after "okay", '
@@ -64,15 +63,6 @@ CALL_END_POLICY = (
     'goodbye, reply with a very short goodbye of at most 5 words (e.g. '
     '"Thank you, bye!" / "धन्यवाद, bye!") and call the end_call function in '
     'the SAME response; do not keep pitching after that.'
-=======
-    'CALL ENDING RULES: When the caller indicates the conversation is over — '
-    'for example "thank you", "thanks", "bye", "goodbye", "theek hai bye", '
-    '"not interested", "do not call again", or "I have to go" — reply with a '
-    'VERY short goodbye of at most 5 words (e.g. "Thank you, bye!" / '
-    '"धन्यवाद, bye!") and call the end_call function in the SAME response. '
-    'Do NOT continue the pitch, ask another question, or start a new topic '
-    'after the caller has said goodbye.'
->>>>>>> bd5731ded513d3d4250604dede79ac277986e737
 )
 
 # Without this the model can recite its own rulebook to the caller (observed
@@ -88,36 +78,23 @@ SECRECY_POLICY = (
     'sales representative would talk.'
 )
 
-# Grounding rules: every fact must come from the digest, which is now a static
-# hand-written sheet (see nevo_prompt). The CodingNowAI RAG path — the crawler,
-# ChromaDB and search_knowledge_base — is unwired from the agent for the Nevo
-# Eon build; apps/knowledge stays intact and still serves the website chatbot.
+# Grounding rules, shared by both agent profiles: every fact comes from the
+# KNOWLEDGE DIGEST (Nevo: static fact sheet; CodingNowAI: crawled digest), and
+# the CodingNowAI profile additionally gets the search_knowledge_base RAG tool
+# for details the digest lacks (see connect()).
 KNOWLEDGE_POLICY = (
-<<<<<<< HEAD
-    ' KNOWLEDGE RULES: Answer questions IMMEDIATELY and confidently from the '
-    'KNOWLEDGE DIGEST below whenever it covers the topic — courses, '
-    'curriculum, duration, demos, certifications, career guidance, '
-    'placements, locations, contact, batches. NEVER say "let me check", "ek '
-    'second", or "senior counselor aapko batayenge" for anything the digest '
-    'or knowledge base can answer — just answer it. For deeper detail the '
-    'digest lacks (curriculum modules, trainer info, prerequisites), call '
-    'the search_knowledge_base tool silently and answer from its results as '
-    'if you knew it all along. Hand off to a senior counselor ONLY for: '
-    'exact fee amounts, discounts, payment/EMI processing, completing an '
-    'admission, or a question the knowledge base genuinely cannot answer — '
-    'offer it warmly (take their name and preferred callback time), then '
-    'keep helping with everything else. NEVER invent fees, discounts, '
-    'dates, or statistics.'
-=======
-    'KNOWLEDGE RULES: The KNOWLEDGE DIGEST below is your ONLY source of facts '
-    'about the company and its products. Answer from it, in your own words. '
-    'If the digest does not contain something — a price, a discount, stock, a '
-    'delivery timeline, a grade, an address — DO NOT guess, estimate, '
-    'approximate, or infer it, even if the caller pushes. Say that a senior '
-    'representative will confirm that detail, and offer a callback. It is '
-    'always better to say you will check than to state a number that is not '
-    'in the digest.'
->>>>>>> bd5731ded513d3d4250604dede79ac277986e737
+    'KNOWLEDGE RULES: The KNOWLEDGE DIGEST below is your source of verified '
+    'facts. Answer questions IMMEDIATELY and confidently from it whenever it '
+    'covers the topic — NEVER say "let me check", "ek second", or "a senior '
+    'person will tell you" for anything the digest already answers. If a '
+    'search_knowledge_base tool is available, use it silently for details '
+    'the digest lacks and answer from its results as if you knew them all '
+    'along. If neither contains the answer — especially exact prices, fees, '
+    'discounts, payment terms, stock, or delivery timelines — DO NOT guess, '
+    'estimate, or infer it, even if the caller pushes: say a senior '
+    'representative will confirm that detail, offer a callback (collect '
+    'their name and preferred time), then continue helping with what you DO '
+    'know. NEVER invent numbers, dates, or statistics.'
 )
 
 # Campaign scripts are hand-written by operators and regularly contain unclosed
@@ -262,11 +239,12 @@ class RealtimeBridge:
                     self.system_prompt, self._load_digest()
                 ),
                 'audio': audio_config,
-                # SEARCH_KB_TOOL is deliberately not registered: the Nevo Eon
-                # facts are static (see _load_digest) and there is no corpus to
-                # search. Add it back alongside the crawled digest if the RAG
-                # path is restored — the handler below is still wired up.
-                'tools': [END_CALL_TOOL],
+                # The Nevo profile has only a static fact sheet — nothing to
+                # search — so it gets no RAG tool; CodingNowAI searches its
+                # crawled ChromaDB corpus.
+                'tools': ([END_CALL_TOOL, SEARCH_KB_TOOL]
+                          if settings.AGENT_PROFILE == 'codingnowai'
+                          else [END_CALL_TOOL]),
                 'tool_choice': 'auto',
             },
         })
@@ -321,15 +299,17 @@ class RealtimeBridge:
 
     @staticmethod
     def _load_digest() -> str:
-        """The agent's fact sheet.
+        """The agent's fact sheet, per AGENT_PROFILE.
 
-        Static and hand-written from the client brief (nevo_prompt), not the
-        crawled/summarized CodingNowAI digest — nadiamonds.com has too little
-        content to crawl usefully, and a demo must not depend on an ingest run.
-        To restore the crawled digest, swap this for:
-            from apps.knowledge.digest import load_digest; return load_digest()
+        Nevo: static and hand-written from the client brief (nevo_prompt) —
+        nadiamonds.com is too thin to crawl and the demo must not depend on an
+        ingest run. CodingNowAI: the digest generated from the website crawl
+        (knowledge_data/digest.txt, refreshed by manage.py ingest_knowledge).
         """
         try:
+            if settings.AGENT_PROFILE == 'codingnowai':
+                from apps.knowledge.digest import load_digest
+                return load_digest()
             from .nevo_prompt import NEVO_FACT_SHEET
             return NEVO_FACT_SHEET
         except Exception:

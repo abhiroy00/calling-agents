@@ -179,6 +179,11 @@ ELEVENLABS_VOICE_ID = config('ELEVENLABS_VOICE_ID', default='OtEfb2LVzIE45wdYe54
 ELEVENLABS_MODEL = config('ELEVENLABS_MODEL', default='eleven_flash_v2_5')
 PUBLIC_HOST = config('PUBLIC_HOST', default='localhost:8000')
 
+# Which agent answers calls that have no system_prompt of their own:
+#   'nevo'        = Nevo Eon Diamonds B2B sales rep (static fact sheet)
+#   'codingnowai' = CodingNowAI admission counselor (crawled digest + RAG search)
+AGENT_PROFILE = config('AGENT_PROFILE', default='nevo')
+
 # --- RAG knowledge base (website content -> ChromaDB) ---
 KNOWLEDGE_SITE_URL = config('KNOWLEDGE_SITE_URL', default='https://codingnowai.in/')
 KNOWLEDGE_DATA_DIR = BASE_DIR / 'knowledge_data'
