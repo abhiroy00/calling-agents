@@ -30,6 +30,16 @@ class CallListView(generics.ListAPIView):
     ordering_fields = ['created_at', 'status', 'duration']
     filterset_fields = ['status', 'campaign', 'disposition']
 
+    def get_queryset(self):
+        qs = super().get_queryset()
+        # ?has_recording=true powers the Recordings page.
+        has_recording = self.request.query_params.get('has_recording')
+        if has_recording in ('true', '1'):
+            qs = qs.exclude(recording_url='')
+        elif has_recording in ('false', '0'):
+            qs = qs.filter(recording_url='')
+        return qs
+
 
 class CallDetailView(generics.RetrieveAPIView):
     queryset = Call.objects.select_related('data').prefetch_related('transcripts', 'emails').all()
@@ -58,10 +68,39 @@ class StatusCallbackView(APIView):
         'queued': 'initiated',
     }
 
+    @staticmethod
+    def _params(request) -> dict:
+        """Callback fields, whether Exotel sends form-encoded or JSON.
+
+        The standard status callback is form-encoded, but some Exotel flows and
+        applets POST JSON — and request.POST is empty for those, which silently
+        loses the recording AND reads Status as '' (blanking the call's status).
+        DRF's request.data handles both. Keys are lowercased for matching;
+        Exotel is not perfectly consistent about casing.
+        """
+        data = request.data
+        if not hasattr(data, 'items'):  # a list/str body is not a callback
+            return {}
+        return {str(k).lower(): v for k, v in data.items()}
+
+    @staticmethod
+    def _first(params: dict, *names: str) -> str:
+        """First non-empty value among `names` (case-insensitive keys)."""
+        for name in names:
+            value = params.get(name.lower())
+            # QueryDict.dict() flattens, but a JSON body may hold lists.
+            if isinstance(value, (list, tuple)):
+                value = value[0] if value else ''
+            value = str(value or '').strip()
+            if value:
+                return value
+        return ''
+
     def post(self, request, pk):
         from .llm import detect_disposition_sync
 
-        exotel_status = request.POST.get('Status', '').lower()
+        params = self._params(request)
+        exotel_status = self._first(params, 'Status', 'CallStatus').lower()
         db_status = self._STATUS_MAP.get(exotel_status, exotel_status)
 
         try:
@@ -69,9 +108,22 @@ class StatusCallbackView(APIView):
         except Call.DoesNotExist:
             return HttpResponse('OK')
 
-        call_sid = request.POST.get('CallSid', '')
+        call_sid = self._first(params, 'CallSid', 'Sid')
         if call_sid and not call.twilio_sid:
             call.twilio_sid = call_sid
+
+        # Exotel posts the recording link with the terminal status, but only if
+        # recording is enabled on the flow — otherwise it is simply absent.
+        # Never blank an existing URL with a later callback that omits it.
+        recording_url = self._first(params, 'RecordingUrl', 'RecordingURL',
+                                    'recording_url')
+        if recording_url:
+            call.recording_url = recording_url
+
+        # An unrecognised or missing Status must never overwrite a real one.
+        if not db_status:
+            call.save(update_fields=['twilio_sid', 'recording_url'])
+            return HttpResponse('OK')
 
         terminal = {'completed', 'failed', 'busy', 'no_answer'}
         if db_status in terminal:
@@ -86,6 +138,7 @@ class StatusCallbackView(APIView):
                 ended_at=now,
                 duration=duration,
                 twilio_sid=call.twilio_sid,
+                recording_url=call.recording_url,
             )
             _broadcast({
                 'type': 'call.status',
@@ -98,7 +151,11 @@ class StatusCallbackView(APIView):
                 from .tasks import process_call_outcome
                 process_call_outcome.delay(pk)
         else:
-            Call.objects.filter(pk=pk).update(status=db_status, twilio_sid=call.twilio_sid)
+            Call.objects.filter(pk=pk).update(
+                status=db_status,
+                twilio_sid=call.twilio_sid,
+                recording_url=call.recording_url,
+            )
             _broadcast({'type': 'call.status', 'call_id': pk, 'status': db_status})
 
         return HttpResponse('OK')
