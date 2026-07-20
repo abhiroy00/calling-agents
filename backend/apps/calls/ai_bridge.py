@@ -21,6 +21,12 @@ logger = logging.getLogger(__name__)
 
 REALTIME_URL = 'wss://api.openai.com/v1/realtime?model={model}'
 
+# How long to wait for the callee to speak before greeting them first. If they
+# say anything sooner, server-VAD auto-responds and this never fires. Long
+# enough for the phone path to fully connect (so the greeting is heard), short
+# enough not to feel like dead air.
+GREET_FALLBACK_SECONDS = 1.5
+
 # Appended to every call's system prompt. Phone audio is 8 kHz and noisy, so
 # without an explicit language policy the model guesses (and then sticks with)
 # whatever language the first unclear utterance resembled.
@@ -46,12 +52,12 @@ SCRIPT_POLICY = (
     'are ALWAYS said in English, with English pronunciation — including in the '
     'middle of a Hindi sentence. NEVER transliterate them into Devanagari.\n'
     'Say (and write) these exactly like this, always:\n'
-    '- "Nevo Eon Diamonds" — never नेवो ऐऑन डायमंड्स\n'
+    '- "Nuvo Eon Diamonds" — never नुवो ऐऑन डायमंड्स\n'
     '- "WhatsApp" — never व्हाट्सएप or वॉट्सएप\n'
     '- "Lab-Grown Diamonds" — never लैब-ग्रोन डायमंड्स\n'
     '- "IGI Certified", "carat", "pointer", "callback", "jewellery" — never '
     'आईजीआई, कैरेट, पॉइंटर, कॉल बैक, ज्वेलरी\n'
-    'The company name "Nevo Eon Diamonds" is pronounced the English way on '
+    'The company name "Nuvo Eon Diamonds" is pronounced the English way on '
     'every single mention, no exceptions. Ordinary Hindi words stay in '
     'Devanagari as normal — this rule is only for names and English terms.'
 )
@@ -193,6 +199,11 @@ SEARCH_KB_TOOL = {
     },
 }
 
+# Both names hang up. Prompts written for other platforms call the tool
+# 'terminate_call'; ours has always been 'end_call'. Registering both means the
+# model can use whichever its script names without the hangup silently failing.
+HANGUP_TOOL_NAMES = {'end_call', 'terminate_call'}
+
 END_CALL_TOOL = {
     'type': 'function',
     'name': 'end_call',
@@ -204,6 +215,8 @@ END_CALL_TOOL = {
     ),
     'parameters': {'type': 'object', 'properties': {}, 'required': []},
 }
+
+TERMINATE_CALL_TOOL = {**END_CALL_TOOL, 'name': 'terminate_call'}
 
 
 class RealtimeBridge:
@@ -231,6 +244,11 @@ class RealtimeBridge:
         self._text_buf = ''
         self._tts = None
         self._tts_task = None
+        # Greeting is fired ONCE, and only once the caller is provably present
+        # (see connect / _greet_fallback). Guards against the greeting playing
+        # into a not-yet-connected line, and against a double greeting.
+        self._greeted = False
+        self._greet_timer = None
         if settings.AI_VOICE_PROVIDER == 'elevenlabs' and settings.ELEVENLABS_API_KEY:
             from .tts import ElevenLabsTTS
             self._tts = ElevenLabsTTS()
@@ -292,17 +310,38 @@ class RealtimeBridge:
                 # The Nevo profile has only a static fact sheet — nothing to
                 # search — so it gets no RAG tool; CodingNowAI searches its
                 # crawled ChromaDB corpus.
-                'tools': ([END_CALL_TOOL, SEARCH_KB_TOOL]
+                'tools': ([END_CALL_TOOL, TERMINATE_CALL_TOOL, SEARCH_KB_TOOL]
                           if settings.AGENT_PROFILE == 'codingnowai'
-                          else [END_CALL_TOOL]),
+                          else [END_CALL_TOOL, TERMINATE_CALL_TOOL]),
                 'tool_choice': 'auto',
             },
         })
-        # Have the AI speak first. Deliberately bare: passing 'instructions'
-        # here would REPLACE the session instructions above for this response,
-        # stripping the opener of its persona, company name and language rules.
-        await self._send({'type': 'response.create'})
         self._recv_task = asyncio.create_task(self._recv_loop())
+        # Do NOT greet immediately: on an outbound call the media stream is live
+        # a beat before the callee's line is, so an instant greeting is spoken
+        # into a dead line and lost — the "first impression never reaches them"
+        # problem. Instead we wait. If the callee says anything (even "hello"),
+        # they are provably connected and server-VAD auto-responds with the
+        # greeting. If they stay silent, this fallback greets after a short beat.
+        self._greet_timer = asyncio.create_task(self._greet_fallback())
+
+    async def _greet_fallback(self):
+        """Greet first only if the caller has not spoken by GREET_FALLBACK_SECONDS.
+
+        Covers the silent-answerer case (many people pick up and wait for the
+        caller to speak). By this point the line is reliably connected, so the
+        greeting actually reaches them.
+        """
+        try:
+            await asyncio.sleep(GREET_FALLBACK_SECONDS)
+        except asyncio.CancelledError:
+            return
+        if self._greeted or self.ws is None:
+            return
+        self._greeted = True
+        # Bare: the opener lives in the session instructions; passing
+        # 'instructions' here would replace them for this one response.
+        await self._send({'type': 'response.create'})
 
     async def send_caller_audio(self, ulaw: bytes):
         if self.ws is not None:
@@ -312,6 +351,8 @@ class RealtimeBridge:
             })
 
     async def close(self):
+        if self._greet_timer:
+            self._greet_timer.cancel()
         if self._recv_task:
             self._recv_task.cancel()
         for task in list(self._tool_tasks):
@@ -409,6 +450,14 @@ class RealtimeBridge:
                 event = json.loads(raw)
                 etype = event.get('type', '')
 
+                # First response of the call has begun (either the caller spoke
+                # and server-VAD auto-responded, or our fallback fired). Mark
+                # greeted and stop the fallback so the greeting can never double.
+                if etype == 'response.created' and not self._greeted:
+                    self._greeted = True
+                    if self._greet_timer:
+                        self._greet_timer.cancel()
+
                 # --- voice mode (AI_VOICE_PROVIDER=openai) ---
                 if etype in ('response.output_audio.delta', 'response.audio.delta'):
                     await self.on_audio(base64.b64decode(event['delta']))
@@ -441,7 +490,7 @@ class RealtimeBridge:
                                 item.get('call_id'), item.get('arguments')))
                             self._tool_tasks.add(task)
                             task.add_done_callback(self._tool_tasks.discard)
-                    if any(i.get('name') == 'end_call' for i in calls) and self.on_hangup:
+                    if any(i.get('name') in HANGUP_TOOL_NAMES for i in calls) and self.on_hangup:
                         # In ElevenLabs mode the goodbye is still streaming out
                         # via TTS; let it finish before hanging up.
                         if self._tts_task and not self._tts_task.done():
@@ -449,7 +498,7 @@ class RealtimeBridge:
                                 await self._tts_task
                             except asyncio.CancelledError:
                                 pass
-                        logger.info('Agent requested hangup via end_call')
+                        logger.info('Agent requested hangup via end_call/terminate_call')
                         await self.on_hangup()
                 elif etype == 'input_audio_buffer.speech_started':
                     await self._cancel_tts()

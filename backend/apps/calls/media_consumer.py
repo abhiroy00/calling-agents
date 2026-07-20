@@ -143,9 +143,9 @@ class ExotelMediaConsumer(AsyncWebsocketConsumer):
 
     @staticmethod
     def _greeting_hint(call) -> str:
-        """Per-profile opener. CodingNowAI uses a fixed scripted greeting;
-        Nevo is an outbound B2B call, so the opener confirms we have the
-        right person before anything else (see nevo_prompt step 1)."""
+        """Per-profile opener. CodingNowAI uses a fixed scripted greeting; Nuvo
+        (Priya) is an outbound B2B call that VERIFIES the right person first —
+        one short line, nothing else — before introducing or pitching."""
         if settings.AGENT_PROFILE == 'codingnowai':
             return ('Start the call by saying EXACTLY this greeting and '
                     f'nothing else: "{FIXED_GREETING}"')
@@ -153,27 +153,22 @@ class ExotelMediaConsumer(AsyncWebsocketConsumer):
         # Placeholder names read terribly on a call ("Hello Unknown").
         if name.lower() in ('unknown', 'na', 'n/a', 'none', 'test'):
             name = ''
-        # Exactly ONE question. Asking for the name AND for a good time in the
-        # same breath leaves the second one unanswered, and the model resolves
-        # that ambiguity by offering a callback to a caller who is right there
-        # willing to talk.
+        # Verify the person FIRST — a single line, then stop and wait. Priya
+        # introduces herself only after they confirm (see nevo_prompt step 1).
         if name:
-            ask = (f'Greet {name} by name, then ask ONE question: whether now '
-                   'is a good time to talk.')
+            who = (f'Say ONE short, warm line to check you are speaking to '
+                   f'{name} — for example "Hello, kya meri baat {name} ji se '
+                   'ho rahi hai?". Use their name in Devanagari.')
         else:
-            ask = ('Then ask ONE question: who you are speaking to. Do NOT '
-                   'also ask whether it is a good time — that comes later.')
+            who = ('Greet warmly, introduce yourself as Priya from Nuvo Eon '
+                   'Diamonds, Mumbai, in one line, and ask if you are speaking '
+                   'to the owner or the person who handles diamond purchase.')
         return (
-            'Open the call in one or two short sentences: introduce yourself, '
-            'name the company you are calling from exactly as the SCRIPT '
-            f'spells it, and say in a few words what it supplies. {ask} '
-            'Never say you are "an AI assistant" and never invent a company '
-            'name. Say NOTHING else — no rules, no lists, no product pitch.\n'
-            'CRITICAL: you are NOT here to book a callback. Do not mention a '
-            'callback, and do not ask when to call back, unless the caller '
-            'has CLEARLY said they cannot talk now. If their reply is '
-            'garbled, unclear, or just their name, ASSUME it is a good time '
-            'and carry on with the conversation.')
+            f'{who} Say NOTHING else in this first turn — do NOT pitch, do NOT '
+            'list products, do NOT ask about their business or a good time '
+            'yet, and do NOT mention a callback. Wait for them to reply. Never '
+            'say you are an AI or an assistant, and never introduce yourself '
+            "using the customer's name — your name is Priya.")
 
     # --- bridge callbacks -------------------------------------------------
 
