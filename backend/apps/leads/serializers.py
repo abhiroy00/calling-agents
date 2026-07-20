@@ -15,10 +15,20 @@ def normalize_phone(phone: str) -> str:
 
 
 class LeadSerializer(serializers.ModelSerializer):
+    # Flattened out of extra_data so the frontend does not dig into JSON.
+    meeting = serializers.SerializerMethodField()
+    interest_level = serializers.SerializerMethodField()
+
     class Meta:
         model = Lead
         fields = '__all__'
         read_only_fields = ('id', 'created_at', 'updated_at')
+
+    def get_meeting(self, obj):
+        return (obj.extra_data or {}).get('meeting')
+
+    def get_interest_level(self, obj):
+        return (obj.extra_data or {}).get('interest_level')
 
 
 class BulkLeadRowSerializer(serializers.Serializer):

@@ -79,16 +79,29 @@ def extract_call_data_sync(transcript_text: str, fields: List[Dict]) -> Dict:
     prompt = (
         'You are analyzing a phone call transcript between an AI agent and a lead. '
         'The call may be in English, Hindi, or Hinglish. '
-        'Extract the following fields. If a field was not discussed, use null.\n\n'
-        f'Fields to extract:\n{field_lines or "(none)"}\n\n'
+        'Extract information the CALLER actually stated. If something was not '
+        'said, use null — never guess, never invent an email or a time.\n\n'
+        f'Campaign-specific fields to extract:\n{field_lines or "(none)"}\n\n'
         'Respond with a JSON object with exactly these keys:\n'
-        '  "data": an object mapping each field key '
+        '  "data": an object mapping each campaign field key '
         f'({", ".join(keys) or "no keys"}) to its extracted value or null,\n'
-        '  "summary": a 1-2 sentence English summary of the call,\n'
+        '  "contact": {"name": str|null, "email": str|null, "phone": str|null, '
+        '"company": str|null} — personal/contact details the caller gave. '
+        'Only include an email if the caller clearly spelled or stated one.\n'
+        '  "meeting": {"requested": true|false, "preferred_day": str|null, '
+        '"preferred_time": str|null, "notes": str|null} — set requested=true if '
+        'the caller asked for a callback, a demo, a meeting, or to be contacted '
+        'later. preferred_day/time are ONLY what the caller actually said.\n'
+        '  "interest_level": one of "high", "medium", "low", "none" — the '
+        'caller\'s interest in the product/service.\n'
+        '  "summary": a 1-2 sentence English summary of the call.\n'
         '  "follow_up_needed": true if the lead expects a follow-up email or callback, else false.\n\n'
         f'Transcript:\n{transcript_text}'
     )
 
+    empty_contact = {'name': None, 'email': None, 'phone': None, 'company': None}
+    empty_meeting = {'requested': False, 'preferred_day': None,
+                     'preferred_time': None, 'notes': None}
     try:
         client = get_sync_client()
         response = client.chat.completions.create(
@@ -96,17 +109,29 @@ def extract_call_data_sync(transcript_text: str, fields: List[Dict]) -> Dict:
             messages=[{'role': 'user', 'content': prompt}],
             response_format={'type': 'json_object'},
             temperature=0,
-            max_tokens=600,
+            max_tokens=700,
         )
         parsed = json.loads(response.choices[0].message.content)
     except Exception:
-        return {'data': {k: None for k in keys}, 'summary': '', 'follow_up_needed': False}
+        return {'data': {k: None for k in keys}, 'contact': dict(empty_contact),
+                'meeting': dict(empty_meeting), 'interest_level': None,
+                'summary': '', 'follow_up_needed': False}
 
     data = parsed.get('data') or {}
     # Guarantee every configured key is present.
     data = {k: data.get(k) for k in keys}
+
+    contact = {**empty_contact, **(parsed.get('contact') or {})}
+    contact = {k: (v.strip() if isinstance(v, str) and v.strip() else None)
+               for k, v in contact.items()}
+    meeting = {**empty_meeting, **(parsed.get('meeting') or {})}
+    meeting['requested'] = bool(meeting.get('requested'))
+
     return {
         'data': data,
+        'contact': contact,
+        'meeting': meeting,
+        'interest_level': (parsed.get('interest_level') or None),
         'summary': (parsed.get('summary') or '').strip(),
         'follow_up_needed': bool(parsed.get('follow_up_needed')),
     }

@@ -13,6 +13,17 @@ class LeadListView(generics.ListAPIView):
     search_fields = ['phone', 'name', 'company', 'email']
     ordering_fields = ['created_at', 'name', 'status']
 
+    def get_queryset(self):
+        qs = super().get_queryset()
+        # ?has_meeting=true powers the Meetings / callbacks page: leads who
+        # asked for a callback, demo, or meeting on a call.
+        if self.request.query_params.get('has_meeting') in ('true', '1'):
+            qs = qs.filter(meeting_requested=True)
+        status_param = self.request.query_params.get('status')
+        if status_param:
+            qs = qs.filter(status=status_param)
+        return qs
+
 
 class BulkUploadView(APIView):
     @extend_schema(

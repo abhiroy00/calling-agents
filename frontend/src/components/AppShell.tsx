@@ -9,6 +9,7 @@ import {
   PhoneCall,
   History,
   Mic,
+  CalendarClock,
   BarChart3,
   LogOut,
   Menu,
@@ -31,7 +32,7 @@ import UsageBadge from "@/components/UsageBadge";
 import OnboardingModal from "@/components/OnboardingModal";
 
 type NavItem = {
-  to: "/dashboard" | "/leads" | "/campaigns" | "/live" | "/dial" | "/history" | "/recordings" | "/analytics" | "/billing";
+  to: "/dashboard" | "/leads" | "/campaigns" | "/live" | "/dial" | "/history" | "/recordings" | "/meetings" | "/analytics" | "/billing";
   label: string;
   icon: typeof LayoutDashboard;
   exact?: boolean;
@@ -56,6 +57,7 @@ const navSections: NavSection[] = [
       { to: "/dial", label: "Dialer", icon: PhoneCall },
       { to: "/history", label: "Conversations", icon: History },
       { to: "/recordings", label: "Recordings", icon: Mic },
+      { to: "/meetings", label: "Meetings", icon: CalendarClock },
     ],
   },
   {

@@ -77,6 +77,65 @@ def dial_campaign_leads(self, campaign_id: int):
         time.sleep(interval)
 
 
+def _persist_contact(call, extracted: dict):
+    """Save contact + meeting details the caller shared onto the Lead.
+
+    Only fills BLANK Lead fields — a real name/email from an earlier upload is
+    never overwritten with something misheard on a noisy call. The meeting
+    request and interest level are stashed in Lead.extra_data (no migration
+    needed) and the Lead status is nudged so callbacks surface in the pipeline.
+    """
+    lead = getattr(call, 'lead', None)
+    if lead is None:
+        return
+
+    contact = extracted.get('contact') or {}
+    meeting = extracted.get('meeting') or {}
+    changed = []
+
+    # Fill blanks only; never clobber existing data with a null/empty capture.
+    if contact.get('name') and not (lead.name or '').strip():
+        lead.name = contact['name'][:150]
+        changed.append('name')
+    if contact.get('company') and not (lead.company or '').strip():
+        lead.company = contact['company'][:150]
+        changed.append('company')
+    if contact.get('email') and not (lead.email or '').strip():
+        m = _EMAIL_RE.search(contact['email'])
+        if m:
+            lead.email = m.group(0)
+            changed.append('email')
+
+    extra = dict(lead.extra_data or {})
+    if meeting.get('requested'):
+        extra['meeting'] = {
+            'requested': True,
+            'preferred_day': meeting.get('preferred_day'),
+            'preferred_time': meeting.get('preferred_time'),
+            'notes': meeting.get('notes'),
+            'from_call': call.id,
+        }
+        if not lead.meeting_requested:
+            lead.meeting_requested = True
+            changed.append('meeting_requested')
+    if extracted.get('interest_level'):
+        extra['interest_level'] = extracted['interest_level']
+    if extra != (lead.extra_data or {}):
+        lead.extra_data = extra
+        changed.append('extra_data')
+
+    # Nudge the pipeline status so a booked callback / hot lead is visible.
+    if meeting.get('requested') and lead.status in ('new', 'called', 'queued'):
+        lead.status = 'callback'
+        changed.append('status')
+    elif extracted.get('interest_level') == 'high' and lead.status in ('new', 'called', 'queued'):
+        lead.status = 'interested'
+        changed.append('status')
+
+    if changed:
+        lead.save(update_fields=list(set(changed)) + ['updated_at'])
+
+
 @shared_task(bind=True, max_retries=2, default_retry_delay=60)
 def process_call_outcome(self, call_id: int):
     """After a call ends: extract configured data from the transcript, store it,
@@ -107,6 +166,11 @@ def process_call_outcome(self, call_id: int):
         },
     )
 
+    # Persist the contact + meeting info the caller shared onto the Lead, so it
+    # survives the call and can drive booking/follow-up. Runs for EVERY call,
+    # including manual dials that have no campaign.
+    _persist_contact(call, extracted)
+
     if campaign is None:
         return  # manual dials have no email config
 
@@ -118,7 +182,9 @@ def process_call_outcome(self, call_id: int):
             emailer.send_operator_summary(call, campaign, call_data, notify)
 
     # Prefer the email the caller gave on the call; fall back to the uploaded one.
-    lead_email = _captured_email(extracted['data']) or (call.lead.email if call.lead else '')
+    lead_email = ((extracted.get('contact') or {}).get('email')
+                  or _captured_email(extracted['data'])
+                  or (call.lead.email if call.lead else ''))
     if campaign.send_lead_followup and call_data.follow_up_needed and lead_email:
         email = llm.generate_followup_email_sync(
             transcript_text,
