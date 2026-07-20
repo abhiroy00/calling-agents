@@ -161,6 +161,8 @@ CELERY_TIMEZONE = 'UTC'
 CELERY_BEAT_SCHEDULER = 'django_celery_beat.schedulers:DatabaseScheduler'
 
 EXOTEL_SID = config('EXOTEL_SID', default='')
+# api.exotel.com = Singapore cluster; api.in.exotel.com = Mumbai/India cluster.
+EXOTEL_API_HOST = config('EXOTEL_API_HOST', default='api.exotel.com')
 EXOTEL_API_KEY = config('EXOTEL_API_KEY', default='')
 EXOTEL_API_SECRET = config('EXOTEL_API_SECRET', default='')
 EXOTEL_FROM_NUMBER = config('EXOTEL_FROM_NUMBER', default='')

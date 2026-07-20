@@ -18,6 +18,14 @@ export const callsApi = baseApi.injectEndpoints({
       query: (id) => ({ url: `/calls/${id}/end/`, method: "POST" }),
       invalidatesTags: (_r, _e, id) => [{ type: "Call", id }, "Call"],
     }),
+    // Lazy: fetched only when the user hits play, so we don't hammer Exotel for
+    // every row on page load. Returns a fresh (often presigned) recording URL.
+    getRecordingUrl: build.query<{ recording_url: string; fresh: boolean }, string | number>({
+      query: (id) => `/calls/${id}/recording/`,
+    }),
+    getNumberMetadata: build.query<any, string>({
+      query: (phone) => ({ url: "/calls/number-metadata/", params: { phone } }),
+    }),
   }),
 });
 
@@ -26,4 +34,6 @@ export const {
   useGetCallQuery,
   useManualDialMutation,
   useEndCallMutation,
+  useLazyGetRecordingUrlQuery,
+  useLazyGetNumberMetadataQuery,
 } = callsApi;

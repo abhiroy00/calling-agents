@@ -46,6 +46,88 @@ class CallDetailView(generics.RetrieveAPIView):
     serializer_class = CallDetailSerializer
 
 
+class CallRecordingView(APIView):
+    """Return a fresh, playable recording URL for a call.
+
+    The recording URL Exotel sends on the status callback can require auth or
+    expire, and Exotel's API token must NEVER reach the browser — so the
+    frontend asks us, and we call Exotel's Call Details API server-side to mint
+    a short-lived presigned link (PreSignedRecordingUrl if the account has it,
+    else RecordingUrl). Authenticated users only.
+    """
+    permission_classes = [IsAuthenticated]
+
+    @extend_schema(
+        parameters=[OpenApiTypes.INT],
+        responses=OpenApiResponse(OpenApiTypes.OBJECT,
+                                  description='A temporary recording URL.'),
+        summary='Get a fresh recording URL for a call',
+    )
+    def get(self, request, pk):
+        from .exotel_client import recording_url_for
+
+        call = Call.objects.filter(pk=pk).first()
+        if call is None:
+            return Response({'error': 'call not found'},
+                            status=status.HTTP_404_NOT_FOUND)
+        if not call.twilio_sid:
+            return Response({'error': 'this call has no Exotel call SID'},
+                            status=status.HTTP_404_NOT_FOUND)
+
+        try:
+            validity = int(request.query_params.get('validity', 30))
+        except (TypeError, ValueError):
+            validity = 30
+
+        try:
+            url = recording_url_for(call.twilio_sid, validity)
+        except Exception as exc:
+            # Fall back to the stored URL rather than failing outright — it may
+            # still be playable, and a dead demo is worse than a stale link.
+            if call.recording_url:
+                return Response({'recording_url': call.recording_url,
+                                 'fresh': False, 'detail': str(exc)})
+            return Response({'error': f'could not fetch recording: {exc}'},
+                            status=status.HTTP_502_BAD_GATEWAY)
+
+        if not url:
+            return Response({'error': 'no recording available for this call'},
+                            status=status.HTTP_404_NOT_FOUND)
+
+        # Cache the freshest URL we have; harmless if it later expires.
+        if url != call.recording_url:
+            Call.objects.filter(pk=pk).update(recording_url=url)
+        return Response({'recording_url': url, 'fresh': True})
+
+
+class NumberMetadataView(APIView):
+    """Telecom metadata (circle, operator, type, DND) for an Indian number.
+
+    Useful before dialing: DND numbers should generally not be cold-called.
+    India-only, per Exotel.
+    """
+    permission_classes = [IsAuthenticated]
+
+    @extend_schema(
+        responses=OpenApiResponse(OpenApiTypes.OBJECT,
+                                  description='Exotel number metadata.'),
+        summary='Look up Indian number telecom metadata',
+    )
+    def get(self, request):
+        from .exotel_client import number_metadata
+
+        phone = (request.query_params.get('phone', '') or '').strip()
+        if not phone:
+            return Response({'error': 'phone is required'},
+                            status=status.HTTP_400_BAD_REQUEST)
+        try:
+            data = number_metadata(phone)
+        except Exception as exc:
+            return Response({'error': str(exc)},
+                            status=status.HTTP_502_BAD_GATEWAY)
+        return Response(data)
+
+
 @extend_schema(
     request=OpenApiTypes.OBJECT,
     responses=OpenApiResponse(OpenApiTypes.STR, description="Plain 'OK'."),

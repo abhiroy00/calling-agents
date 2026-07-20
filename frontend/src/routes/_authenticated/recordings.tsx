@@ -1,7 +1,9 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useState } from "react";
-import { ExternalLink, Mic, Download } from "lucide-react";
-import { useGetCallsQuery } from "@/features/calls/callsApi";
+import { ExternalLink, Mic, Download, Play, Loader2 } from "lucide-react";
+import {
+  useGetCallsQuery,
+  useLazyGetRecordingUrlQuery,
+} from "@/features/calls/callsApi";
 import { PageHeader } from "@/components/PageHeader";
 import StatusBadge from "@/components/StatusBadge";
 
@@ -22,11 +24,85 @@ function formatDuration(seconds?: number): string {
   return m > 0 ? `${m}m ${s}s` : `${s}s`;
 }
 
+function RecordingCard({ call }: { call: any }) {
+  // The recording URL is fetched from our backend only when the user asks to
+  // play — the backend calls Exotel to mint a fresh (often presigned) link.
+  // Never hit Exotel directly from here; that would leak the API token.
+  const [fetchUrl, { data, isFetching, error }] = useLazyGetRecordingUrlQuery();
+  const url = data?.recording_url;
+
+  return (
+    <div className="glass rounded-2xl p-4 shadow-(--shadow-card)">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div className="min-w-0">
+          <p className="truncate font-medium text-foreground">
+            {call.lead_name || "Unknown lead"}
+          </p>
+          <p className="mt-0.5 font-mono text-xs tabular text-muted-foreground">
+            {call.lead_phone || "—"}
+          </p>
+        </div>
+        <div className="flex flex-wrap items-center gap-2">
+          <StatusBadge status={call.disposition} />
+          <span className="tabular text-xs text-muted-foreground">
+            {formatDuration(call.duration)}
+          </span>
+          <span className="text-xs text-muted-foreground">
+            {call.created_at ? new Date(call.created_at).toLocaleString() : "—"}
+          </span>
+        </div>
+      </div>
+
+      {url ? (
+        <>
+          <audio controls autoPlay preload="none" src={url} className="mt-3 w-full" />
+          <div className="mt-2 flex justify-end">
+            <a
+              href={url}
+              target="_blank"
+              rel="noreferrer"
+              className="inline-flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground"
+            >
+              <Download className="h-3.5 w-3.5" /> Download
+            </a>
+          </div>
+        </>
+      ) : error ? (
+        <p className="mt-3 rounded-md border border-border bg-background/60 px-3 py-2 text-xs text-muted-foreground">
+          Could not load this recording.{" "}
+          {call.recording_url && (
+            <a
+              href={call.recording_url}
+              target="_blank"
+              rel="noreferrer"
+              className="inline-flex items-center gap-1 text-primary hover:underline"
+            >
+              Try the stored link <ExternalLink className="h-3 w-3" />
+            </a>
+          )}
+        </p>
+      ) : (
+        <button
+          onClick={() => fetchUrl(call.id)}
+          disabled={isFetching}
+          className="mt-3 inline-flex items-center gap-2 rounded-lg border border-border bg-surface/60 px-3 py-2 text-sm font-medium text-foreground transition-colors hover:border-primary/40 hover:bg-primary/10 disabled:opacity-50"
+        >
+          {isFetching ? (
+            <Loader2 className="h-4 w-4 animate-spin" />
+          ) : (
+            <Play className="h-4 w-4" />
+          )}
+          {isFetching ? "Loading…" : "Load recording"}
+        </button>
+      )}
+    </div>
+  );
+}
+
 function RecordingsPage() {
   // Server-side filter: only calls Exotel gave us a recording URL for.
   const { data, isFetching, error } = useGetCallsQuery({ has_recording: "true" });
   const calls: any[] = data?.results || data || [];
-  const [failed, setFailed] = useState<Record<string, boolean>>({});
 
   return (
     <div className="mx-auto max-w-5xl">
@@ -60,62 +136,7 @@ function RecordingsPage() {
 
       <div className="grid gap-3">
         {calls.map((c: any) => (
-          <div key={c.id} className="glass rounded-2xl p-4 shadow-(--shadow-card)">
-            <div className="flex flex-wrap items-start justify-between gap-3">
-              <div className="min-w-0">
-                <p className="truncate font-medium text-foreground">
-                  {c.lead_name || "Unknown lead"}
-                </p>
-                <p className="mt-0.5 font-mono text-xs tabular text-muted-foreground">
-                  {c.lead_phone || "—"}
-                </p>
-              </div>
-              <div className="flex flex-wrap items-center gap-2">
-                <StatusBadge status={c.disposition} />
-                <span className="tabular text-xs text-muted-foreground">
-                  {formatDuration(c.duration)}
-                </span>
-                <span className="text-xs text-muted-foreground">
-                  {c.created_at ? new Date(c.created_at).toLocaleString() : "—"}
-                </span>
-              </div>
-            </div>
-
-            {failed[c.id] ? (
-              // The URL is Exotel's, not ours — if the browser cannot fetch it,
-              // say so rather than showing a silently dead player.
-              <p className="mt-3 rounded-md border border-border bg-background/60 px-3 py-2 text-xs text-muted-foreground">
-                This recording could not be played in the browser.{" "}
-                <a
-                  href={c.recording_url}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="inline-flex items-center gap-1 text-primary hover:underline"
-                >
-                  Open it directly <ExternalLink className="h-3 w-3" />
-                </a>
-              </p>
-            ) : (
-              <audio
-                controls
-                preload="none"
-                src={c.recording_url}
-                onError={() => setFailed((f) => ({ ...f, [c.id]: true }))}
-                className="mt-3 w-full"
-              />
-            )}
-
-            <div className="mt-2 flex justify-end">
-              <a
-                href={c.recording_url}
-                target="_blank"
-                rel="noreferrer"
-                className="inline-flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground"
-              >
-                <Download className="h-3.5 w-3.5" /> Download
-              </a>
-            </div>
-          </div>
+          <RecordingCard key={c.id} call={c} />
         ))}
       </div>
     </div>
