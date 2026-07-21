@@ -21,11 +21,12 @@ logger = logging.getLogger(__name__)
 
 REALTIME_URL = 'wss://api.openai.com/v1/realtime?model={model}'
 
-# How long to wait for the callee to speak before greeting them first. If they
-# say anything sooner, server-VAD auto-responds and this never fires. Long
-# enough for the phone path to fully connect (so the greeting is heard), short
-# enough not to feel like dead air.
-GREET_FALLBACK_SECONDS = 1.5
+# The AI LEADS the call: it greets first, after a short settle delay. The delay
+# exists because on an outbound call the media stream opens a beat before the
+# callee's audio path does — greeting at 0s plays into a dead line and the first
+# impression is lost. ~1s lets the path connect so the greeting is actually
+# heard, while still being the agent that speaks first (not the caller).
+GREET_DELAY_SECONDS = 1.0
 
 # Appended to every call's system prompt. Phone audio is 8 kHz and noisy, so
 # without an explicit language policy the model guesses (and then sticks with)
@@ -34,6 +35,10 @@ LANGUAGE_POLICY = (
     'LANGUAGE RULES: The caller speaks English and Hindi, often mixed (Hinglish). '
     'Reply ONLY in English or Hindi, mirroring whichever language the caller used last. '
     'NEVER use any other language, no matter what you think you heard. '
+    'When you reply in Hindi, speak ENGLISH-HEAVY Hinglish like an NRI — use the '
+    'English word wherever one exists (time, good, actually, sure, business, '
+    'price, senior, callback, requirement, details), with Hindi only as the '
+    'light glue between them. NEVER heavy, pure, or formal Hindi. '
     'If you could not understand the caller, ask them to repeat, in English.'
 )
 
@@ -317,23 +322,19 @@ class RealtimeBridge:
             },
         })
         self._recv_task = asyncio.create_task(self._recv_loop())
-        # Do NOT greet immediately: on an outbound call the media stream is live
-        # a beat before the callee's line is, so an instant greeting is spoken
-        # into a dead line and lost — the "first impression never reaches them"
-        # problem. Instead we wait. If the callee says anything (even "hello"),
-        # they are provably connected and server-VAD auto-responds with the
-        # greeting. If they stay silent, this fallback greets after a short beat.
-        self._greet_timer = asyncio.create_task(self._greet_fallback())
+        # The AI leads: greet first, after a short settle delay so the greeting
+        # is not spoken into a not-yet-connected line (see GREET_DELAY_SECONDS).
+        self._greet_timer = asyncio.create_task(self._greet_lead())
 
-    async def _greet_fallback(self):
-        """Greet first only if the caller has not spoken by GREET_FALLBACK_SECONDS.
+    async def _greet_lead(self):
+        """Speak the opening greeting first, once the line has settled.
 
-        Covers the silent-answerer case (many people pick up and wait for the
-        caller to speak). By this point the line is reliably connected, so the
-        greeting actually reaches them.
+        If the caller somehow speaks in the first second and server-VAD responds
+        before this fires, the _greeted guard (set in _recv_loop) makes this a
+        no-op so the greeting is never doubled.
         """
         try:
-            await asyncio.sleep(GREET_FALLBACK_SECONDS)
+            await asyncio.sleep(GREET_DELAY_SECONDS)
         except asyncio.CancelledError:
             return
         if self._greeted or self.ws is None:

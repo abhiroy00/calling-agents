@@ -164,11 +164,14 @@ class ExotelMediaConsumer(AsyncWebsocketConsumer):
                    'Diamonds, Mumbai, in one line, and ask if you are speaking '
                    'to the owner or the person who handles diamond purchase.')
         return (
-            f'{who} Say NOTHING else in this first turn — do NOT pitch, do NOT '
-            'list products, do NOT ask about their business or a good time '
-            'yet, and do NOT mention a callback. Wait for them to reply. Never '
-            'say you are an AI or an assistant, and never introduce yourself '
-            "using the customer's name — your name is Priya.")
+            f'{who} Speak English-heavy Hinglish like an NRI — use English '
+            'words wherever you can, even in this greeting (say "actually", '
+            '"good time to talk", "sure"); never heavy or formal Hindi. '
+            'Say NOTHING else in this first turn — do NOT pitch, do NOT list '
+            'products, do NOT ask about their business or a good time yet, and '
+            'do NOT mention a callback. Wait for them to reply. Never say you '
+            "are an AI or an assistant, and never introduce yourself using the "
+            "customer's name — your name is Priya.")
 
     # --- bridge callbacks -------------------------------------------------
 
