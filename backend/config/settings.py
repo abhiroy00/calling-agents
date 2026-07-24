@@ -25,6 +25,7 @@ INSTALLED_APPS = [
     'django_celery_beat',
     'drf_spectacular',
     'apps.accounts',
+    'apps.administration',
     'apps.leads',
     'apps.campaigns',
     'apps.calls',

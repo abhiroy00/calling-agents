@@ -23,8 +23,13 @@ import {
   Plus,
   Rocket,
   CreditCard,
+  ShieldCheck,
+  Building2,
+  ScrollText,
+  Activity,
+  KeyRound,
 } from "lucide-react";
-import { logout } from "@/features/auth/authSlice";
+import { logout, type UserRole } from "@/features/auth/authSlice";
 import { resetBilling } from "@/features/billing/billingSlice";
 import type { RootState } from "@/app/store";
 import { cn } from "@/lib/utils";
@@ -32,11 +37,28 @@ import UsageBadge from "@/components/UsageBadge";
 import OnboardingModal from "@/components/OnboardingModal";
 
 type NavItem = {
-  to: "/dashboard" | "/leads" | "/campaigns" | "/live" | "/dial" | "/history" | "/recordings" | "/meetings" | "/analytics" | "/billing";
+  to:
+    | "/dashboard"
+    | "/leads"
+    | "/campaigns"
+    | "/live"
+    | "/dial"
+    | "/history"
+    | "/recordings"
+    | "/meetings"
+    | "/analytics"
+    | "/billing"
+    | "/admin/users"
+    | "/admin/tenants"
+    | "/admin/audit"
+    | "/admin/system"
+    | "/admin/roles";
   label: string;
   icon: typeof LayoutDashboard;
   exact?: boolean;
   badge?: string;
+  // Roles allowed to see this item. Omitted = visible to everyone.
+  roles?: UserRole[];
 };
 
 type NavSection = { label: string; items: NavItem[] };
@@ -67,12 +89,39 @@ const navSections: NavSection[] = [
       { to: "/billing", label: "Billing", icon: CreditCard },
     ],
   },
+  {
+    label: "Admin",
+    items: [
+      { to: "/admin/users", label: "Users & roles", icon: ShieldCheck, roles: ["super_admin"] },
+      {
+        to: "/admin/roles",
+        label: "Roles & access",
+        icon: KeyRound,
+        roles: ["super_admin", "manager"],
+      },
+      { to: "/admin/tenants", label: "Tenants", icon: Building2, roles: ["super_admin"] },
+      { to: "/admin/audit", label: "Audit log", icon: ScrollText, roles: ["super_admin"] },
+      {
+        to: "/admin/system",
+        label: "System health",
+        icon: Activity,
+        roles: ["super_admin", "manager"],
+      },
+    ],
+  },
 ];
 
 const flatNav = navSections.flatMap((s) => s.items);
 
 function SidebarInner({ onNav }: { onNav?: () => void }) {
   const pathname = useRouterState({ select: (s) => s.location.pathname });
+  const role = useSelector((s: RootState) => s.auth.user?.role as UserRole | undefined);
+  const visibleSections = navSections
+    .map((section) => ({
+      ...section,
+      items: section.items.filter((it) => !it.roles || (role != null && it.roles.includes(role))),
+    }))
+    .filter((section) => section.items.length > 0);
   return (
     <div className="flex h-full flex-col border-r border-sidebar-border bg-sidebar">
       {/* Brand */}
@@ -100,7 +149,9 @@ function SidebarInner({ onNav }: { onNav?: () => void }) {
             AC
           </div>
           <div className="min-w-0 flex-1">
-            <p className="truncate text-[12.5px] font-semibold text-foreground">InnovativeAI Solutions</p>
+            <p className="truncate text-[12.5px] font-semibold text-foreground">
+              InnovativeAI Solutions
+            </p>
             <p className="truncate text-[10px] text-muted-foreground">Growth · 42 seats</p>
           </div>
           <ChevronDown className="h-3.5 w-3.5 text-muted-foreground" />
@@ -119,7 +170,7 @@ function SidebarInner({ onNav }: { onNav?: () => void }) {
       </div>
 
       <nav className="flex-1 space-y-4 overflow-y-auto px-3 pb-4">
-        {navSections.map((section) => (
+        {visibleSections.map((section) => (
           <div key={section.label}>
             <p className="px-2 pb-1 text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground/70">
               {section.label}
@@ -199,9 +250,7 @@ export default function AppShell({ children }: { children: ReactNode }) {
   const dispatch = useDispatch();
   const navigate = useNavigate();
   const pathname = useRouterState({ select: (s) => s.location.pathname });
-  const current = flatNav.find((n) =>
-    n.exact ? pathname === n.to : pathname.startsWith(n.to),
-  );
+  const current = flatNav.find((n) => (n.exact ? pathname === n.to : pathname.startsWith(n.to)));
 
   function handleLogout() {
     dispatch(logout());

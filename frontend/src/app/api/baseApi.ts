@@ -1,4 +1,10 @@
-import { createApi, fetchBaseQuery, type BaseQueryFn, type FetchArgs, type FetchBaseQueryError } from "@reduxjs/toolkit/query/react";
+import {
+  createApi,
+  fetchBaseQuery,
+  type BaseQueryFn,
+  type FetchArgs,
+  type FetchBaseQueryError,
+} from "@reduxjs/toolkit/query/react";
 import { API_URL } from "@/lib/constants";
 import { logout, setCredentials } from "@/features/auth/authSlice";
 
@@ -59,6 +65,16 @@ const baseQueryWithReauth: BaseQueryFn<string | FetchArgs, unknown, FetchBaseQue
 export const baseApi = createApi({
   reducerPath: "api",
   baseQuery: baseQueryWithReauth,
-  tagTypes: ["Lead", "Campaign", "Call", "Analytics"],
+  tagTypes: [
+    "Lead",
+    "Campaign",
+    "Call",
+    "Analytics",
+    "AdminUser",
+    "Tenant",
+    "AuditLog",
+    "AdminSystem",
+    "AdminRoles",
+  ],
   endpoints: () => ({}),
 });
